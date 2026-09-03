@@ -32,6 +32,7 @@ var (
 const usage = `crv — review code in the terminal
 
 usage:
+  crv                the pull requests waiting on your review
   crv .              review uncommitted work (including untracked files)
   crv <range>        review a range, e.g. main...feature or HEAD~3..HEAD
   crv <number>       review a pull request, e.g. crv 42
@@ -45,6 +46,7 @@ flags:
   --no-untracked     exclude untracked files from the working-tree diff
   --width <n>        output width when not attached to a terminal
   --export markdown  print the saved notes for this review and exit
+  --limit <n>        how many pull requests the queue lists (default 30)
   --config           print the resolved configuration and exit
 
 notes are stored outside the repository, keyed by pull request number or by
@@ -66,6 +68,7 @@ func run() error {
 		noUntracked = flag.Bool("no-untracked", false, "exclude untracked files")
 		widthFlag   = flag.Int("width", 0, "output width when not a terminal")
 		export      = flag.String("export", "", "print saved notes: markdown")
+		limit       = flag.Int("limit", 30, "how many pull requests the queue lists")
 		showConfig  = flag.Bool("config", false, "print the resolved configuration")
 		showVersion = flag.Bool("version", false, "print version and exit")
 	)
@@ -110,6 +113,19 @@ func run() error {
 		return printConfig(cfg, repo.Root)
 	}
 
+	// A bare `crv` opens the queue: it is the one invocation with no natural
+	// argument, and it is the thing that replaces opening github.com.
+	if flag.NArg() == 0 && *export == "" {
+		sel, err := runQueue(repo, cfg, *limit)
+		if err != nil {
+			return err
+		}
+		if !sel.Chosen {
+			return nil
+		}
+		return reviewPR(repo, cfg, sel.Repo, sel.Number)
+	}
+
 	target := "."
 	if flag.NArg() > 0 {
 		target = flag.Arg(0)
@@ -120,14 +136,20 @@ func run() error {
 		return err
 	}
 
+	return start(repo, cfg, src, files, *export)
+}
+
+// start loads the saved notes for a source and shows it, however it was
+// reached: a target on the command line or a row in the queue.
+func start(repo *gitsrc.Repo, cfg config.Config, src tui.Source, files []*diffparse.FileDiff, export string) error {
 	branch, _ := repo.Branch()
 	review, err := notes.Load(src.Scope(repo.Root, branch))
 	if err != nil {
 		return err
 	}
 
-	if *export != "" {
-		return printExport(*export, review)
+	if export != "" {
+		return printExport(export, review)
 	}
 	if len(files) == 0 {
 		fmt.Println("no changes")
@@ -150,16 +172,100 @@ func run() error {
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
 		return printPlain(files, th, cfg, tui.Overlay(review, comments, tui.Blobs(files)))
 	}
-	prog := tea.NewProgram(tui.New(tui.Options{
+	_, err = tea.NewProgram(tui.New(tui.Options{
 		Files:    files,
 		Theme:    th,
 		Config:   cfg,
 		Source:   src,
 		Review:   review,
 		Comments: comments,
-	}), tea.WithAltScreen())
-	_, err = prog.Run()
+	}), tea.WithAltScreen()).Run()
 	return err
+}
+
+// runQueue shows the review queue and returns what was chosen.
+func runQueue(repo *gitsrc.Repo, cfg config.Config, limit int) (tui.Selection, error) {
+	client := ghsrc.Client{Host: cfg.Host, Dir: repo.Root}
+	if err := client.Preflight(); err != nil {
+		return tui.Selection{}, fmt.Errorf("%w\n\nthe queue needs gh; local reviews (crv . and crv <range>) do not", err)
+	}
+
+	// Piped output gets the list as text: starting a full-screen program with
+	// no terminal would fail, and `crv | grep` is a reasonable thing to want.
+	if !isatty.IsTerminal(os.Stdout.Fd()) {
+		return tui.Selection{}, printQueue(client, limit)
+	}
+
+	th := render.DefaultTheme()
+	th.Syntax = cfg.Theme
+
+	model, err := tea.NewProgram(tui.NewQueue(client, th, limit), tea.WithAltScreen()).Run()
+	if err != nil {
+		return tui.Selection{}, err
+	}
+	q, ok := model.(tui.QueueModel)
+	if !ok {
+		return tui.Selection{}, nil
+	}
+	return q.Selected, nil
+}
+
+// printQueue is the non-interactive queue: one line per pull request.
+func printQueue(client ghsrc.Client, limit int) error {
+	items, _, err := client.CachedQueue(ghsrc.FilterReviewRequested, limit, false)
+	if err != nil && len(items) == 0 {
+		return err
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "crv: "+err.Error()+" — showing the cached list")
+	}
+	if len(items) == 0 {
+		fmt.Println("nothing waiting on your review")
+		return nil
+	}
+	for _, it := range items {
+		check := " "
+		switch it.Checks {
+		case "SUCCESS":
+			check = "✓"
+		case "FAILURE", "ERROR":
+			check = "✗"
+		case "PENDING":
+			check = "•"
+		}
+		fmt.Printf("%s %s#%-4d %-8s %-4s %s\n", check, it.Repo, it.Number, it.Author, it.Age(), it.Title)
+	}
+	return nil
+}
+
+// reviewPR opens a pull request chosen from the queue. It may live in another
+// repository than the working directory, so the client is pointed at that
+// repository by name rather than by path.
+func reviewPR(repo *gitsrc.Repo, cfg config.Config, name string, number int) error {
+	client := ghsrc.Client{Host: cfg.Host, Dir: repo.Root, Repo: name}
+
+	pr, err := client.PR(number)
+	if err != nil {
+		return err
+	}
+	raw, err := client.Diff(number)
+	if err != nil {
+		return err
+	}
+	files := diffparse.Parse(raw)
+	diffparse.FillStats(files)
+
+	viewer, _ := client.Viewer()
+	src := tui.Source{
+		Kind:     tui.SourcePR,
+		Title:    fmt.Sprintf("%s#%d %s", name, pr.Number, pr.Title),
+		Repo:     name,
+		PRNumber: pr.Number,
+		Client:   client,
+		Author:   pr.Author.Login,
+		Viewer:   viewer,
+	}
+	return start(repo, cfg, src, files, "")
 }
 
 var prNumber = regexp.MustCompile(`^#?(\d+)$`)
@@ -190,7 +296,7 @@ func resolvePR(repo *gitsrc.Repo, cfg config.Config, number int) (tui.Source, []
 		return tui.Source{}, nil, err
 	}
 
-	name, err := client.Repo()
+	name, err := client.CurrentRepo()
 	if err != nil {
 		return tui.Source{}, nil, err
 	}
