@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tobiasbernting/code-review-cli/internal/config"
 )
 
 // Side mirrors GitHub's diff sides. Only RIGHT is written today; LEFT exists
@@ -82,11 +84,11 @@ func LocalScope(repoRoot, branch string) string {
 // Dir is where reviews are stored: outside the repository, so notes never
 // pollute a worktree that is shared or reset.
 func Dir() (string, error) {
-	base, err := os.UserConfigDir()
+	base, err := config.Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(base, "crv", "reviews"), nil
+	return filepath.Join(base, "reviews"), nil
 }
 
 func fileFor(scope string) (string, error) {

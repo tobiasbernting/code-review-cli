@@ -156,6 +156,13 @@ func run() error {
 		return nil
 	}
 
+	// Earlier versions stored everything under os.UserConfigDir, which on
+	// macOS is ~/Library/Application Support. Move it once so saved notes
+	// survive the change of location.
+	if from, to, moved := config.Migrate(); moved {
+		fmt.Fprintf(os.Stderr, "crv: moved your notes and settings\n     from %s\n     to   %s\n", from, to)
+	}
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err

@@ -87,8 +87,9 @@ Reviewing:
 
 ## Notes and reviews
 
-Notes are stored outside the repository — under `os.UserConfigDir()/crv` — so
-they never pollute a worktree that is shared or reset. They are keyed by pull
+Notes are stored outside the repository — under `~/.config/crv`, or
+`$XDG_CONFIG_HOME/crv` if that is set — so they never pollute a worktree that
+is shared or reset. They are keyed by pull
 request number, or by branch for local work, so an agent rewriting files
 underneath you does not orphan them.
 
@@ -111,7 +112,11 @@ prints the notes for pasting wherever they need to go.
 
 Optional. Settings are resolved from, highest priority first: command-line
 flags, `CRV_*` environment variables, `.crv.toml` in the repository, and
-`config.toml` beside the stored reviews. `crv --config` prints what won.
+`~/.config/crv/config.toml`. `crv --config` prints what won and whether each
+file exists; `crv --help` shows the exact commands to create one.
+
+On Windows the directory is `%AppData%\crv`, where that convention applies
+instead.
 
 ```toml
 # .crv.toml — checked in, or not, as you prefer

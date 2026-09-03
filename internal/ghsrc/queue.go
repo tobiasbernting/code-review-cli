@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/tobiasbernting/code-review-cli/internal/config"
 )
 
 // Filter selects which pull requests the queue shows.
@@ -145,11 +147,11 @@ type queueCache struct {
 const CacheTTL = 5 * time.Minute
 
 func cachePath() (string, error) {
-	base, err := os.UserConfigDir()
+	base, err := config.Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(base, "crv", "queue.json"), nil
+	return filepath.Join(base, "queue.json"), nil
 }
 
 // CachedQueue returns the cached list when it is fresh, and fetches otherwise.

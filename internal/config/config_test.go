@@ -7,16 +7,16 @@ import (
 	"testing"
 )
 
-// useConfigDir redirects the user-level config lookup at a temporary
-// directory and returns the crv subdirectory inside it.
+// useConfigDir points the configuration directory at a temporary location
+// and returns the crv subdirectory inside it.
 func useConfigDir(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	old := userConfigDir
-	userConfigDir = func() (string, error) { return dir, nil }
-	t.Cleanup(func() { userConfigDir = old })
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	crv := filepath.Join(dir, "crv")
+	crv, err := Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(crv, 0o700); err != nil {
 		t.Fatal(err)
 	}
