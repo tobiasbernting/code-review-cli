@@ -71,6 +71,12 @@ type FileDiff struct {
 	OldMode  string
 	NewMode  string
 
+	// Blob hashes from the diff's index line. Notes anchor to NewBlob: when
+	// the file changes underneath a note, the hash no longer matches and the
+	// note is shown as stale rather than pointing at a line that moved.
+	OldBlob string
+	NewBlob string
+
 	// Additions/Deletions come from `git diff --numstat`, not from parsing,
 	// so they are available without touching hunk bodies.
 	Additions int
@@ -93,6 +99,28 @@ func (f *FileDiff) Path() string {
 func (f *FileDiff) Hunks() []Hunk {
 	f.once.Do(func() { f.hunks = parseHunks(f.body) })
 	return f.hunks
+}
+
+// FillStats counts additions and deletions from the hunks themselves, for
+// diffs that did not come with a --numstat companion — a pull request diff
+// fetched through gh, for instance. It forces hunk parsing, so call it only
+// when the stats are actually going to be shown.
+func FillStats(files []*FileDiff) {
+	for _, f := range files {
+		if f.Additions > 0 || f.Deletions > 0 || f.IsBinary {
+			continue
+		}
+		for _, h := range f.Hunks() {
+			for _, l := range h.Lines {
+				switch l.Kind {
+				case KindAdd:
+					f.Additions++
+				case KindDel:
+					f.Deletions++
+				}
+			}
+		}
+	}
 }
 
 var hunkRe = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$`)
@@ -129,6 +157,8 @@ func parseFile(block []string) *FileDiff {
 		switch {
 		case strings.HasPrefix(l, "@@"):
 			goto body
+		case strings.HasPrefix(l, "index "):
+			f.OldBlob, f.NewBlob = blobsFromIndexLine(l)
 		case strings.HasPrefix(l, "new file mode "):
 			f.Status = Added
 			f.NewMode = strings.TrimPrefix(l, "new file mode ")
@@ -246,6 +276,21 @@ func pathsFromGitLine(l string) (string, string) {
 		return stripPrefix(rest[:i]), stripPrefix(rest[i+1:])
 	}
 	return rest, rest
+}
+
+// blobsFromIndexLine reads "index <old>..<new>[ <mode>]". Both hashes are
+// abbreviated by git; they are only ever compared to each other, so the short
+// form is enough.
+func blobsFromIndexLine(l string) (string, string) {
+	rest := strings.TrimPrefix(l, "index ")
+	if i := strings.IndexByte(rest, ' '); i >= 0 {
+		rest = rest[:i]
+	}
+	old, new, ok := strings.Cut(rest, "..")
+	if !ok {
+		return "", ""
+	}
+	return old, new
 }
 
 func stripPrefix(p string) string {

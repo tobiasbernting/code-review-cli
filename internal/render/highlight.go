@@ -25,6 +25,12 @@ type Highlighter struct {
 
 	mu     sync.Mutex
 	lexers map[string]chroma.Lexer
+
+	// cache memoises highlighting per (path, source). The document is rebuilt
+	// whenever a note is added or a file is marked reviewed, and re-lexing a
+	// large pull request on every keystroke is the difference between instant
+	// and unusable.
+	cache map[string][][]Segment
 }
 
 func NewHighlighter(styleName string, enabled bool) *Highlighter {
@@ -32,7 +38,12 @@ func NewHighlighter(styleName string, enabled bool) *Highlighter {
 	if st == nil {
 		st = styles.Fallback
 	}
-	return &Highlighter{style: st, enabled: enabled, lexers: map[string]chroma.Lexer{}}
+	return &Highlighter{
+		style:   st,
+		enabled: enabled,
+		lexers:  map[string]chroma.Lexer{},
+		cache:   map[string][][]Segment{},
+	}
 }
 
 // Lines highlights source and returns one segment slice per line. The result
@@ -42,6 +53,15 @@ func (h *Highlighter) Lines(path, source string) [][]Segment {
 	if !h.enabled {
 		return plain
 	}
+
+	key := path + "\x00" + source
+	h.mu.Lock()
+	cached, ok := h.cache[key]
+	h.mu.Unlock()
+	if ok {
+		return cached
+	}
+
 	it, err := h.lexerFor(path).Tokenise(nil, source)
 	if err != nil {
 		return plain
@@ -72,6 +92,10 @@ func (h *Highlighter) Lines(path, source string) [][]Segment {
 	for len(out) < len(plain) {
 		out = append(out, []Segment{})
 	}
+
+	h.mu.Lock()
+	h.cache[key] = out
+	h.mu.Unlock()
 	return out
 }
 

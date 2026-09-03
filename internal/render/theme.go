@@ -20,6 +20,13 @@ type Theme struct {
 	HunkFg   string
 	MetaFg   string
 	CursorBg string
+
+	NoteFg     string // your own unsent notes
+	CommentFg  string // existing review comments from GitHub
+	StaleFg    string // notes and comments that no longer anchor
+	NoteBg     string
+	ReviewedFg string
+	ChangedFg  string
 }
 
 func DefaultTheme() Theme {
@@ -38,5 +45,12 @@ func DefaultTheme() Theme {
 		HunkFg:    "#61afef",
 		MetaFg:    "#7f848e",
 		CursorBg:  "#3a3f4b",
+
+		NoteFg:     "#e5c07b",
+		CommentFg:  "#56b6c2",
+		StaleFg:    "#7f848e",
+		NoteBg:     "#252a33",
+		ReviewedFg: "#7fd88f",
+		ChangedFg:  "#e5c07b",
 	}
 }

@@ -1,4 +1,4 @@
- greeter.go
+   greeter.go
  @@ -1,7 +1,8 @@ package greeter
   1   1  package greeter
   2   2
@@ -9,12 +9,12 @@
       5 +    return msg
   5   6  }
 
- notes.md
+   notes.md
    new file
  @@ -0,0 +1,2 @@
       1 +# Notes
       2 +first line
 
- logo.png
+   logo.png
    binary file — not shown
 

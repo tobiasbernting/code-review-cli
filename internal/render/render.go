@@ -24,6 +24,7 @@ const (
 	RowMeta         // rename/binary/mode notes under a file header
 	RowHunk
 	RowCode
+	RowNote // a local note or an existing review comment
 	RowSpacer
 )
 
@@ -37,6 +38,15 @@ type Row struct {
 	Segs    []Segment
 	Marks   []span // byte ranges that differ from the paired line
 	Text    string // header text, for non-code rows
+
+	// Annotation rows carry the note or comment they render, and Cont marks
+	// the second and later lines of a wrapped body.
+	Ann  *Annotation
+	Cont bool
+
+	// Reviewed and Changed decorate a file header.
+	Reviewed bool
+	Changed  bool
 }
 
 // Document is the full rendered diff plus the index needed to jump around it.
@@ -51,15 +61,26 @@ type Document struct {
 
 // Build renders every file. Hunk parsing happens here, so callers that only
 // need the file list should not call Build.
-func Build(files []*diffparse.FileDiff, h *Highlighter) *Document {
+// Build renders every file, drawing the overlay's notes and comments beneath
+// the lines they belong to. Pass the zero Overlay for a plain diff.
+func Build(files []*diffparse.FileDiff, h *Highlighter, ov Overlay) *Document {
 	d := &Document{Files: files, gutterOld: 3, gutterNew: 3}
 
 	for fi, f := range files {
+		reviewed, changed := ov.fileState(f.Path())
 		d.FileRows = append(d.FileRows, len(d.Rows))
-		d.Rows = append(d.Rows, Row{Kind: RowFile, FileIdx: fi, HunkIdx: -1, Text: fileHeaderText(f)})
+		d.Rows = append(d.Rows, Row{
+			Kind: RowFile, FileIdx: fi, HunkIdx: -1, Text: fileHeaderText(f),
+			Reviewed: reviewed, Changed: changed,
+		})
 
 		for _, m := range metaNotes(f) {
 			d.Rows = append(d.Rows, Row{Kind: RowMeta, FileIdx: fi, HunkIdx: -1, Text: m})
+		}
+		// Detached annotations go directly under the header: they belong to
+		// this file but no longer to any line in it.
+		for _, a := range ov.detached(f.Path()) {
+			d.Rows = append(d.Rows, annotationRows(fi, -1, a, true)...)
 		}
 		if f.IsBinary {
 			d.Rows = append(d.Rows, Row{Kind: RowSpacer, FileIdx: fi, HunkIdx: -1})
@@ -80,11 +101,28 @@ func Build(files []*diffparse.FileDiff, h *Highlighter) *Document {
 					Kind: RowCode, FileIdx: fi, HunkIdx: hi,
 					Line: ln, Segs: segs[li], Marks: marks[li],
 				})
+				// Annotations hang off the new-side line number, which is the
+				// coordinate GitHub review comments use.
+				for _, a := range ov.at(f.Path(), ln.NewNum) {
+					d.Rows = append(d.Rows, annotationRows(fi, hi, a, false)...)
+				}
 			}
 		}
 		d.Rows = append(d.Rows, Row{Kind: RowSpacer, FileIdx: fi, HunkIdx: -1})
 	}
 	return d
+}
+
+// annotationRows turns one annotation into its rows. The body is stored
+// unwrapped: wrapping happens at paint time, because the terminal can be
+// resized after the document is built.
+func annotationRows(fileIdx, hunkIdx int, a Annotation, detached bool) []Row {
+	ann := a
+	if detached {
+		ann.Stale = true
+	}
+	rows := []Row{{Kind: RowNote, FileIdx: fileIdx, HunkIdx: hunkIdx, Ann: &ann}}
+	return rows
 }
 
 func (d *Document) trackGutter(ln diffparse.Line) {
@@ -241,7 +279,9 @@ func (r *Renderer) Render(row Row, width, hoffset int, cursor bool) string {
 	t := r.Theme
 	switch row.Kind {
 	case RowFile:
-		return r.pad(r.style(t.FileFg, t.FileBg).Bold(true).Render(clip(" "+row.Text, width)), width, t.FileBg)
+		return r.fileRow(row, width)
+	case RowNote:
+		return r.noteRow(row, width, cursor)
 	case RowMeta:
 		return r.pad(r.style(t.MetaFg, "").Render(clip("   "+row.Text, width)), width, "")
 	case RowHunk:
@@ -357,6 +397,72 @@ func inSpans(spans []span, off int) bool {
 		}
 	}
 	return false
+}
+
+// fileRow draws the header, prefixed with a review marker. A file that
+// changed after being marked keeps its tick and gains a tilde: silently
+// unticking would hide that you had already read it.
+func (r *Renderer) fileRow(row Row, width int) string {
+	t := r.Theme
+	marker, markerFg := "  ", t.FileFg
+	switch {
+	case row.Reviewed && row.Changed:
+		marker, markerFg = "~ ", t.ChangedFg
+	case row.Reviewed:
+		marker, markerFg = "✓ ", t.ReviewedFg
+	}
+
+	text := row.Text
+	if row.Reviewed && row.Changed {
+		text += "  (changed since reviewed)"
+	}
+	line := r.style(markerFg, t.FileBg).Bold(true).Render(" "+marker) +
+		r.style(t.FileFg, t.FileBg).Bold(true).Render(clip(text, width-3))
+	return r.pad(line, width, t.FileBg)
+}
+
+// noteRow draws one annotation under the line it belongs to, wrapped to the
+// available width.
+func (r *Renderer) noteRow(row Row, width int, cursor bool) string {
+	t := r.Theme
+	a := row.Ann
+	if a == nil {
+		return ""
+	}
+
+	fg := t.NoteFg
+	marker := "▌ "
+	switch {
+	case a.Stale:
+		fg = t.StaleFg
+	case a.Kind == AnnComment:
+		fg = t.CommentFg
+	}
+
+	label := "you"
+	if a.Author != "" {
+		label = a.Author
+	}
+	if a.Stale {
+		label += " (stale)"
+	}
+	if a.StartLine > 0 && a.StartLine != a.Line {
+		label += fmt.Sprintf(" L%d-%d", a.StartLine, a.Line)
+	}
+
+	bg := t.NoteBg
+	if cursor {
+		bg = t.CursorBg
+	}
+
+	indent := r.Doc.GutterWidth()
+	body := strings.Join(strings.Fields(strings.ReplaceAll(a.Body, "\n", " ")), " ")
+	text := marker + label + ": " + body
+
+	var b strings.Builder
+	b.WriteString(r.style("", bg).Render(strings.Repeat(" ", indent)))
+	b.WriteString(r.style(fg, bg).Render(clip(text, width-indent)))
+	return r.pad(b.String(), width, bg)
 }
 
 func (r *Renderer) pad(s string, width int, bg string) string {

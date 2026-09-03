@@ -31,6 +31,22 @@ func Open(dir string) (*Repo, error) {
 	return &Repo{Root: strings.TrimSpace(out)}, nil
 }
 
+// Branch is the current branch name, or the short commit when detached.
+// Reviews of local work are keyed by branch, so notes survive an agent
+// rewriting files and committing underneath them.
+func (r *Repo) Branch() (string, error) {
+	out, err := run(r.Root, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	name := strings.TrimSpace(out)
+	if name != "HEAD" {
+		return name, nil
+	}
+	out, err = run(r.Root, "rev-parse", "--short", "HEAD")
+	return strings.TrimSpace(out), err
+}
+
 // WorkingTree diffs HEAD against the working tree (staged and unstaged
 // together), plus every untracked file rendered as an addition.
 //

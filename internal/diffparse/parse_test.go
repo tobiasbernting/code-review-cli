@@ -163,3 +163,32 @@ func TestParseQuotedPath(t *testing.T) {
 		t.Errorf("path = %q, want föo.txt", f.Path())
 	}
 }
+
+func TestParseIndexBlobs(t *testing.T) {
+	f := Parse(modifiedDiff)[0]
+	if f.OldBlob != "1111111" || f.NewBlob != "2222222" {
+		t.Errorf("blobs = %q..%q, want 1111111..2222222", f.OldBlob, f.NewBlob)
+	}
+
+	// A new file's index line has no mode suffix and an all-zero old hash.
+	added := Parse("diff --git a/n.txt b/n.txt\nnew file mode 100644\nindex 0000000..abc1234\n--- /dev/null\n+++ b/n.txt\n@@ -0,0 +1 @@\n+x\n")[0]
+	if added.NewBlob != "abc1234" {
+		t.Errorf("new file blob = %q, want abc1234", added.NewBlob)
+	}
+}
+
+func TestFillStatsCountsFromHunks(t *testing.T) {
+	files := Parse(modifiedDiff)
+	FillStats(files)
+	if files[0].Additions != 3 || files[0].Deletions != 1 {
+		t.Errorf("stats = +%d −%d, want +3 −1", files[0].Additions, files[0].Deletions)
+	}
+
+	// Existing counts win: --numstat is authoritative where it ran.
+	pre := Parse(modifiedDiff)
+	pre[0].Additions, pre[0].Deletions = 99, 98
+	FillStats(pre)
+	if pre[0].Additions != 99 {
+		t.Errorf("FillStats overwrote numstat counts: +%d", pre[0].Additions)
+	}
+}
