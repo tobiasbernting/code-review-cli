@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1](https://github.com/tobiasbernting/code-review-cli/compare/v1.1.0...v1.1.1) (2026-09-03)
+
+
+### Fixes
+
+* publish releases that immutable releases will accept ([#13](https://github.com/tobiasbernting/code-review-cli/issues/13)) ([281140b](https://github.com/tobiasbernting/code-review-cli/commit/281140bd91ffd88556895e1f266ff29d16849774))
+* stop release-please skipping every release ([#11](https://github.com/tobiasbernting/code-review-cli/issues/11)) ([848cbb4](https://github.com/tobiasbernting/code-review-cli/commit/848cbb466d36e2dffecd789dee240f77fa714ca2))
+
 ## [1.1.0](https://github.com/tobiasbernting/code-review-cli/compare/v1.0.0...v1.1.0) (2026-09-03)
 
 
