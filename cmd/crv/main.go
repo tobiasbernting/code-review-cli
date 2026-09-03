@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -29,15 +30,25 @@ var (
 	date    = "unknown"
 )
 
-const usage = `crv — review code in the terminal
+// usage is built at call time so it can name the actual configuration paths
+// on this machine rather than describing where they might be.
+func usage() string {
+	userPath, err := config.UserPath()
+	if err != nil {
+		userPath = "(could not determine your config directory)"
+	}
+	notesDir, err := notes.Dir()
+	if err != nil {
+		notesDir = "(could not determine your config directory)"
+	}
+
+	return fmt.Sprintf(`crv — review code in the terminal
 
 usage:
   crv                the pull requests waiting on your review
   crv .              review uncommitted work (including untracked files)
   crv <range>        review a range, e.g. main...feature or HEAD~3..HEAD
   crv <number>       review a pull request, e.g. crv 42
-  crv --help
-  crv --version
 
 flags:
   --host <name>      GitHub hostname (default: whatever gh is configured with)
@@ -45,13 +56,56 @@ flags:
   --no-color         disable colour (also honours NO_COLOR)
   --no-untracked     exclude untracked files from the working-tree diff
   --width <n>        output width when not attached to a terminal
-  --export markdown  print the saved notes for this review and exit
   --limit <n>        how many pull requests the queue lists (default 30)
+  --export markdown  print the saved notes for this review and exit
   --config           print the resolved configuration and exit
+  --version          print version and exit
 
-notes are stored outside the repository, keyed by pull request number or by
-branch, and are never sent anywhere until you submit them with S.
-`
+configuration:
+  Entirely optional — crv works with no configuration at all. Settings are
+  read from the following, and the first one that mentions a setting wins:
+
+    1. the flags above
+    2. environment: CRV_HOST, CRV_THEME, CRV_EDITOR, CRV_WIDTH,
+       CRV_UNTRACKED, CRV_COLOR, NO_COLOR
+    3. %s in the repository being reviewed
+    4. %s
+
+  To create the user-level file (the quotes matter — the path contains a
+  space on macOS):
+
+    mkdir -p %s
+    $EDITOR %s
+
+  Both files are TOML and every key is optional:
+
+    host = "github.example.com"   # default: whatever gh is configured with
+    theme = "catppuccin-mocha"    # any chroma style name
+    editor = "hx"                 # default: $VISUAL, then $EDITOR, then vi
+    untracked = true              # include untracked files in crv .
+    color = true
+    width = 120                   # used when output is piped
+
+  Set host in a repository's %s to review on an enterprise host
+  without changing anything globally.
+
+  `+"`crv --config`"+` prints which settings are in effect and which files were
+  read. Review notes are kept in:
+    %s
+
+`, config.RepoFile, userPath, shellQuote(filepath.Dir(userPath)), shellQuote(userPath),
+		config.RepoFile, notesDir)
+}
+
+// shellQuote makes a path safe to paste into a shell. macOS puts the config
+// directory under "Application Support", so a space is the common case rather
+// than an edge one.
+func shellQuote(path string) string {
+	if !strings.ContainsAny(path, " \t'\"$`\\") {
+		return path
+	}
+	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -60,22 +114,44 @@ func main() {
 	}
 }
 
-func run() error {
-	var (
-		host        = flag.String("host", "", "GitHub hostname")
-		theme       = flag.String("theme", "", "chroma syntax theme")
-		noColor     = flag.Bool("no-color", false, "disable colour")
-		noUntracked = flag.Bool("no-untracked", false, "exclude untracked files")
-		widthFlag   = flag.Int("width", 0, "output width when not a terminal")
-		export      = flag.String("export", "", "print saved notes: markdown")
-		limit       = flag.Int("limit", 30, "how many pull requests the queue lists")
-		showConfig  = flag.Bool("config", false, "print the resolved configuration")
-		showVersion = flag.Bool("version", false, "print version and exit")
-	)
-	flag.Usage = func() { fmt.Fprint(os.Stderr, usage) }
-	flag.Parse()
+// options are the command-line flags. They are registered on a FlagSet rather
+// than the global one so the help text can be checked against the flags that
+// actually exist.
+type options struct {
+	host        string
+	theme       string
+	export      string
+	noColor     bool
+	noUntracked bool
+	showConfig  bool
+	showVersion bool
+	width       int
+	limit       int
+}
 
-	if *showVersion {
+func registerFlags(fs *flag.FlagSet) *options {
+	var o options
+	fs.StringVar(&o.host, "host", "", "GitHub hostname")
+	fs.StringVar(&o.theme, "theme", "", "chroma syntax theme")
+	fs.StringVar(&o.export, "export", "", "print saved notes: markdown")
+	fs.BoolVar(&o.noColor, "no-color", false, "disable colour")
+	fs.BoolVar(&o.noUntracked, "no-untracked", false, "exclude untracked files")
+	fs.BoolVar(&o.showConfig, "config", false, "print the resolved configuration")
+	fs.BoolVar(&o.showVersion, "version", false, "print version and exit")
+	fs.IntVar(&o.width, "width", 0, "output width when not a terminal")
+	fs.IntVar(&o.limit, "limit", 30, "how many pull requests the queue lists")
+	return &o
+}
+
+func run() error {
+	fs := flag.NewFlagSet("crv", flag.ExitOnError)
+	fs.Usage = func() { fmt.Fprint(os.Stderr, usage()) }
+	opts := registerFlags(fs)
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		return err
+	}
+
+	if opts.showVersion {
 		fmt.Printf("crv %s (%s, built %s)\n", version, commit, date)
 		return nil
 	}
@@ -94,29 +170,29 @@ func run() error {
 		return err
 	}
 	// Flags are applied last: only here is it known which were actually set.
-	flag.Visit(func(f *flag.Flag) {
+	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "host":
-			cfg.Host = *host
+			cfg.Host = opts.host
 		case "theme":
-			cfg.Theme = *theme
+			cfg.Theme = opts.theme
 		case "no-color":
-			cfg.Color = !*noColor
+			cfg.Color = !opts.noColor
 		case "no-untracked":
-			cfg.Untracked = !*noUntracked
+			cfg.Untracked = !opts.noUntracked
 		case "width":
-			cfg.Width = *widthFlag
+			cfg.Width = opts.width
 		}
 	})
 
-	if *showConfig {
+	if opts.showConfig {
 		return printConfig(cfg, repo.Root)
 	}
 
 	// A bare `crv` opens the queue: it is the one invocation with no natural
 	// argument, and it is the thing that replaces opening github.com.
-	if flag.NArg() == 0 && *export == "" {
-		sel, err := runQueue(repo, cfg, *limit)
+	if fs.NArg() == 0 && opts.export == "" {
+		sel, err := runQueue(repo, cfg, opts.limit)
 		if err != nil {
 			return err
 		}
@@ -127,8 +203,8 @@ func run() error {
 	}
 
 	target := "."
-	if flag.NArg() > 0 {
-		target = flag.Arg(0)
+	if fs.NArg() > 0 {
+		target = fs.Arg(0)
 	}
 
 	src, files, err := resolve(repo, cfg, target)
@@ -136,7 +212,7 @@ func run() error {
 		return err
 	}
 
-	return start(repo, cfg, src, files, *export)
+	return start(repo, cfg, src, files, opts.export)
 }
 
 // start loads the saved notes for a source and shows it, however it was
@@ -354,16 +430,26 @@ func printConfig(cfg config.Config, repoRoot string) error {
 	fmt.Printf("untracked  %t\n", cfg.Untracked)
 	fmt.Printf("color      %t\n", cfg.Color)
 	fmt.Printf("width      %d\n", cfg.Width)
-	fmt.Printf("\nuser file  %s\n", userPath)
-	fmt.Printf("repo file  %s\n", repoRoot+"/"+config.RepoFile)
+	fmt.Printf("\nuser file  %s%s\n", userPath, exists(userPath))
+	repoFile := filepath.Join(repoRoot, config.RepoFile)
+	fmt.Printf("repo file  %s%s\n", repoFile, exists(repoFile))
 	if s := cfg.Sources(); len(s) > 0 {
 		fmt.Printf("loaded     %s\n", strings.Join(s, ", "))
 	} else {
-		fmt.Printf("loaded     (none — all defaults)\n")
+		fmt.Printf("loaded     (none — all defaults; crv --help shows how to create one)\n")
 	}
 	dir, _ := notes.Dir()
 	fmt.Printf("notes      %s\n", dir)
 	return nil
+}
+
+// exists annotates a path with whether a file is actually there, so --config
+// answers "is my file being picked up?" and not only "where would it go?".
+func exists(path string) string {
+	if _, err := os.Stat(path); err == nil {
+		return ""
+	}
+	return "  (does not exist)"
 }
 
 func orDefault(v, fallback string) string {
