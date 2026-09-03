@@ -93,11 +93,8 @@ func New(opts Options) Model {
 		width:    80,
 		height:   24,
 		hl:       render.NewHighlighter(opts.Theme.Syntax, opts.Config.Color),
-		blobs:    map[string]string{},
 	}
-	for _, f := range opts.Files {
-		m.blobs[f.Path()] = f.NewBlob
-	}
+	m.blobs = Blobs(opts.Files)
 	if m.review == nil {
 		m.review = &notes.Review{Files: map[string]notes.FileMark{}}
 	}
@@ -143,59 +140,8 @@ func (m *Model) rebuild() {
 	m.clampScroll()
 }
 
-// overlay adapts the note store and the fetched comments to what the renderer
-// needs, without either side knowing about the other.
 func (m *Model) overlay() render.Overlay {
-	return render.Overlay{
-		At: func(path string, line int) []render.Annotation {
-			var out []render.Annotation
-			for _, n := range m.review.Notes {
-				if n.Path != path || n.Line != line {
-					continue
-				}
-				if notes.Stale(n, m.blobs[path]) {
-					continue // shown detached instead
-				}
-				out = append(out, render.Annotation{
-					Kind: render.AnnNote, ID: n.ID, Body: n.Body,
-					StartLine: n.StartLine, Line: n.Line,
-				})
-			}
-			for _, c := range m.comments {
-				if c.Path != path || c.Line != line || c.Outdated() {
-					continue
-				}
-				out = append(out, render.Annotation{
-					Kind: render.AnnComment, ID: fmt.Sprint(c.ID), Author: c.User.Login,
-					Body: c.Body, StartLine: c.StartLine, Line: c.Line,
-				})
-			}
-			return out
-		},
-		Detached: func(path string) []render.Annotation {
-			var out []render.Annotation
-			for _, n := range m.review.Notes {
-				if n.Path == path && notes.Stale(n, m.blobs[path]) {
-					out = append(out, render.Annotation{
-						Kind: render.AnnNote, ID: n.ID, Body: n.Body,
-						StartLine: n.StartLine, Line: n.Line, Stale: true,
-					})
-				}
-			}
-			for _, c := range m.comments {
-				if c.Path == path && c.Outdated() {
-					out = append(out, render.Annotation{
-						Kind: render.AnnComment, ID: fmt.Sprint(c.ID), Author: c.User.Login,
-						Body: c.Body, Line: c.Line, Stale: true,
-					})
-				}
-			}
-			return out
-		},
-		FileState: func(path string) (bool, bool) {
-			return m.review.ReviewState(path, m.blobs[path])
-		},
-	}
+	return Overlay(m.review, m.comments, m.blobs)
 }
 
 func (m Model) Init() tea.Cmd { return nil }

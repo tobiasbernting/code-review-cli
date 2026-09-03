@@ -148,7 +148,7 @@ func run() error {
 	th.Syntax = cfg.Theme
 
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
-		return printPlain(files, th, cfg)
+		return printPlain(files, th, cfg, tui.Overlay(review, comments, tui.Blobs(files)))
 	}
 	prog := tea.NewProgram(tui.New(tui.Options{
 		Files:    files,
@@ -260,12 +260,12 @@ func orDefault(v, fallback string) string {
 
 // printPlain is the non-TTY path: same rows, printed once and exited, so
 // `crv . | less` and `crv . > review.txt` work.
-func printPlain(files []*diffparse.FileDiff, th render.Theme, cfg config.Config) error {
+func printPlain(files []*diffparse.FileDiff, th render.Theme, cfg config.Config, ov render.Overlay) error {
 	width := cfg.Width
 	if width <= 0 {
 		width = 120
 	}
-	doc := render.Build(files, render.NewHighlighter(th.Syntax, cfg.Color), render.Overlay{})
+	doc := render.Build(files, render.NewHighlighter(th.Syntax, cfg.Color), ov)
 	r := render.NewRenderer(th, doc)
 
 	var b strings.Builder
