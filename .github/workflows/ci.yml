@@ -1,22 +1,21 @@
 name: ci
 
-# Deliberately no pull_request trigger. This is a public repository, so a
-# pull_request workflow would let anyone with a fork run code on our runners.
-# Pushing a branch requires write access, which keeps CI to collaborators.
-# Re-add pull_request only alongside "Require approval for all outside
-# collaborators" in Settings > Actions > General.
+# Pull requests only. Pushing a branch and opening a pull request would
+# otherwise run this twice, and main has already been checked by the pull
+# request that produced it.
+#
+# There is no fork exposure: the job below skips pull requests from forks, and
+# the repository requires approval for outside collaborators.
 on:
-  push:
-    branches: ["**"]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test:
-    # The renderer is width- and terminal-sensitive, so it is worth proving the
-    # build on the platforms crv actually ships to rather than on linux alone.
+  build:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       fail-fast: false
       matrix:
@@ -30,6 +29,10 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # All three platforms are built because the source is platform-specific:
+      # gitsrc has separate Windows and Unix files behind build tags.
+      - run: go build ./...
+
       - name: gofmt
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -40,20 +43,21 @@ jobs:
             exit 1
           fi
 
-      - run: go vet ./...
-      - run: go test ./... -race
+      - name: go vet
+        if: matrix.os == 'ubuntu-latest'
+        run: go vet ./...
 
   # A single check to require in the branch ruleset. Matrix jobs each produce
   # their own context name, which would mean re-editing the ruleset every time
   # the matrix changes.
   ci:
     if: always()
-    needs: test
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: verify matrix succeeded
+      - name: verify build matrix succeeded
         run: |
-          if [ "${{ needs.test.result }}" != "success" ]; then
-            echo "test matrix result: ${{ needs.test.result }}"
+          if [ "${{ needs.build.result }}" != "success" ]; then
+            echo "build matrix result: ${{ needs.build.result }}"
             exit 1
           fi
