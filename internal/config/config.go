@@ -68,11 +68,11 @@ var userConfigDir = os.UserConfigDir
 
 // UserPath is the path to the user-level config file.
 func UserPath() (string, error) {
-	base, err := userConfigDir()
+	dir, err := Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(base, "crv", UserFile), nil
+	return filepath.Join(dir, UserFile), nil
 }
 
 // Load merges the user file, then the repository file, then the environment.

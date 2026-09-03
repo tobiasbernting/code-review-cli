@@ -32,6 +32,7 @@ archives:
     files:
       - README.md
       - LICENSE
+      - config.example.toml
 
 checksum:
   name_template: checksums.txt

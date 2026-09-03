@@ -19,6 +19,7 @@ put it on your `PATH`. From a clone: `go build -o crv ./cmd/crv`.
 ## Use
 
 ```sh
+crv                    # the pull requests waiting on your review
 crv .                  # uncommitted work, including untracked files
 crv main...feature     # a revision range
 crv HEAD~3..HEAD
@@ -26,8 +27,19 @@ crv 42                 # pull request 42, via gh
 crv . | less -R        # non-interactive: prints and exits
 ```
 
-Local reviews need only git. Pull requests need [gh](https://cli.github.com),
-which already knows your host and credentials — including an enterprise one.
+Local reviews need only git. The queue and pull requests need
+[gh](https://cli.github.com), which already knows your host and credentials —
+including an enterprise one.
+
+### The queue
+
+A bare `crv` lists what is waiting on you, across every repository, with CI
+status, age, and how many unsent notes you already have on each. `enter` opens
+one, `t` switches to your own pull requests, `r` refreshes.
+
+The list is one GraphQL request and is cached for five minutes; a failed
+refresh shows the cached list rather than an empty screen. Diffs are never
+cached — reviewing a stale diff is the worst thing this tool could do.
 
 Untracked files are shown as additions on purpose: when reviewing generated
 code, the new files are usually the point of the change, and plain `git diff`
@@ -69,13 +81,16 @@ Reviewing:
 | `--width <n>` | output width when stdout is not a terminal |
 | `--host <name>` | GitHub hostname; defaults to gh's own configuration |
 | `--export markdown` | print this review's notes and exit |
+| `--limit <n>` | how many pull requests the queue lists (default 30) |
 | `--config` | print the resolved configuration and exit |
+| `--init-config` | write a starter configuration file and exit |
 | `--version` | print version and exit |
 
 ## Notes and reviews
 
-Notes are stored outside the repository — under `os.UserConfigDir()/crv` — so
-they never pollute a worktree that is shared or reset. They are keyed by pull
+Notes are stored outside the repository — under `~/.config/crv`, or
+`$XDG_CONFIG_HOME/crv` if that is set — so they never pollute a worktree that
+is shared or reset. They are keyed by pull
 request number, or by branch for local work, so an agent rewriting files
 underneath you does not orphan them.
 
@@ -96,9 +111,24 @@ prints the notes for pasting wherever they need to go.
 
 ## Configuration
 
-Optional. Settings are resolved from, highest priority first: command-line
-flags, `CRV_*` environment variables, `.crv.toml` in the repository, and
-`config.toml` beside the stored reviews. `crv --config` prints what won.
+Optional — crv works with none. To start from a documented file:
+
+```sh
+crv --init-config          # writes ~/.config/crv/config.toml
+```
+
+Every setting in it is commented out, so nothing is overridden until you
+uncomment it. That is deliberate: a starter file listing real values would pin
+today's defaults forever, and a later change to one would never reach you.
+[`config.example.toml`](config.example.toml) is the same file, for reading here.
+
+Settings are resolved from, highest priority first: command-line flags, `CRV_*`
+environment variables, `.crv.toml` in the repository, and
+`~/.config/crv/config.toml`. `crv --config` prints what won and whether each
+file exists.
+
+On Windows the directory is `%AppData%\crv`, where that convention applies
+instead.
 
 ```toml
 # .crv.toml — checked in, or not, as you prefer
@@ -168,7 +198,6 @@ goreleaser build --snapshot --clean
 
 ## Planned
 
-- `crv` with no argument — the pull requests awaiting your review
 - Mouse support and OSC 52 yank
 - Replying to a teammate's comment thread
 - `LEFT`-side comments on deleted lines

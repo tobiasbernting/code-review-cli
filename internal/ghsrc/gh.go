@@ -27,6 +27,11 @@ type Client struct {
 	// both work without special-casing either.
 	Host string
 	Dir  string // repository directory, so gh resolves the right remote
+
+	// Repo names a repository explicitly, as "owner/name". The queue lists
+	// pull requests from every repository you are involved in, which are
+	// mostly not the one you are standing in.
+	Repo string
 }
 
 // Preflight checks that gh exists and is authenticated. It is called once per
@@ -50,8 +55,11 @@ func (c Client) Preflight() error {
 	return nil
 }
 
-// Repo is the "owner/name" of the repository in the working directory.
-func (c Client) Repo() (string, error) {
+// CurrentRepo is the "owner/name" of the repository in the working directory.
+func (c Client) CurrentRepo() (string, error) {
+	if c.Repo != "" {
+		return c.Repo, nil
+	}
 	out, err := c.run("repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner")
 	if err != nil {
 		return "", err
@@ -79,8 +87,8 @@ type PR struct {
 }
 
 func (c Client) PR(number int) (*PR, error) {
-	out, err := c.run("pr", "view", strconv.Itoa(number), "--json",
-		"number,title,body,state,url,baseRefName,headRefName,headRefOid,author,isDraft")
+	out, err := c.run(c.prArgs("view", strconv.Itoa(number), "--json",
+		"number,title,body,state,url,baseRefName,headRefName,headRefOid,author,isDraft")...)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +101,17 @@ func (c Client) PR(number int) (*PR, error) {
 
 // Diff returns the pull request's unified diff.
 func (c Client) Diff(number int) (string, error) {
-	return c.run("pr", "diff", strconv.Itoa(number))
+	return c.run(c.prArgs("diff", strconv.Itoa(number))...)
+}
+
+// prArgs builds a `gh pr` invocation, adding --repo when the client targets a
+// repository other than the working directory's.
+func (c Client) prArgs(args ...string) []string {
+	out := append([]string{"pr"}, args...)
+	if c.Repo != "" {
+		out = append(out, "--repo", c.Repo)
+	}
+	return out
 }
 
 // Comment is one existing review comment written by a teammate.
