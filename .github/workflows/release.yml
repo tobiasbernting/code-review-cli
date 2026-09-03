@@ -1,21 +1,20 @@
 name: release
 
-# release-please accumulates merged pull requests into a release pull request
-# with a generated changelog. Merging that pull request tags the version, and
-# the same run then builds and uploads the binaries.
+# Immutable releases are enabled on this repository, so a published release
+# cannot gain assets or have its body edited afterwards. Whoever creates the
+# release must therefore create it complete, in one shot — which has to be
+# GoReleaser, since it is the one with the binaries.
 #
-# Tagging and building live in one workflow on purpose: a tag pushed by
-# GITHUB_TOKEN does not trigger other workflows, so a separate tag-triggered
-# release job would silently never run.
+# So release-please only manages the release pull request and the changelog.
+# Merging that pull request makes this workflow create the tag, and the tag
+# makes GoReleaser publish the release with its artifacts.
 #
-# The same rule is why release-please needs RELEASE_PLEASE_TOKEN: a release
-# pull request opened with GITHUB_TOKEN gets no check runs, and main requires
-# ci and pr-title to pass, so it could never be merged.
+# The tag is pushed with RELEASE_PLEASE_TOKEN rather than GITHUB_TOKEN,
+# because GitHub does not trigger workflows for anything the built-in token
+# pushes — the goreleaser job would never run.
 on:
   push:
     branches: [main]
-    # A tag pushed by hand is the escape hatch when release-please's own
-    # bookkeeping gets stuck: it builds and publishes that tag directly.
     tags: ["v*"]
   workflow_dispatch:
 
@@ -27,35 +26,57 @@ jobs:
   release-please:
     if: "!startsWith(github.ref, 'refs/tags/')"
     runs-on: ubuntu-latest
-    outputs:
-      released: ${{ steps.release.outputs.release_created }}
-      tag: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v5
-        id: release
         with:
-          # Falls back to GITHUB_TOKEN so the workflow still runs without the
-          # secret — it just produces a release pull request nobody can merge.
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          # GoReleaser creates the GitHub release; see the note above.
+          skip-github-release: true
 
-  goreleaser:
+  # Tags whatever version the manifest names, if that tag does not exist yet.
+  # Reading the manifest rather than the action's output means a release that
+  # was interrupted halfway is picked up by the next run instead of needing a
+  # tag pushed by hand.
+  tag:
     needs: release-please
-    # Runs either because release-please just cut a release, or because a tag
-    # was pushed by hand, in which case release-please above is skipped.
-    if: |
-      always() && (
-        needs.release-please.outputs.released == 'true' ||
-        startsWith(github.ref, 'refs/tags/')
-      )
+    if: "!startsWith(github.ref, 'refs/tags/')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          # Build the tag release-please just created, not the branch head,
-          # and take the full history so the version stamp is right.
-          ref: ${{ needs.release-please.outputs.tag || github.ref }}
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
+
+      - name: tag the manifest version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(jq -r '."."' .release-please-manifest.json)"
+          if [ -z "$version" ] || [ "$version" = "null" ]; then
+            echo "no version in .release-please-manifest.json"
+            exit 1
+          fi
+
+          tag="v$version"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists — nothing to do"
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "$tag"
+          git push origin "$tag"
+          echo "tagged $tag"
+
+  goreleaser:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
           fetch-depth: 0
 
       - uses: actions/setup-go@v7
