@@ -50,10 +50,10 @@ changelog:
       - "^ci:"
 
 release:
-  # release-please has already created the release and written the changelog
-  # into its body; append mode adds the archives and install notes to it
-  # instead of failing on "release already exists".
-  mode: append
+  # Immutable releases cannot be edited after publication, so the body must be
+  # right when the release is created. append would try to PATCH it afterwards
+  # and fail once the artifacts are already uploaded.
+  mode: keep-existing
   draft: false
   prerelease: auto
   footer: |

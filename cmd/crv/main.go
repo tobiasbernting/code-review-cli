@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -22,13 +23,61 @@ import (
 	"github.com/tobiasbernting/code-review-cli/internal/tui"
 )
 
-// Build metadata, injected by GoReleaser via -ldflags. The defaults are what
-// a plain `go build` produces.
+// Build metadata, injected by GoReleaser via -ldflags. A plain `go build` or
+// `go install` sets none of it, so the defaults are filled in from the build
+// info Go embeds instead — otherwise everyone who installed with go install
+// sees "dev" and cannot tell which version they are running.
 var (
 	version = "dev"
 	commit  = "none"
 	date    = "unknown"
 )
+
+// pseudoVersion matches the timestamp-and-hash Go appends when it derives a
+// version from a commit rather than a tag.
+var pseudoVersion = regexp.MustCompile(`\d{14}-[0-9a-f]{12}`)
+
+// releaseVersion accepts only a version that came from a real tag.
+func releaseVersion(v string) (string, bool) {
+	if v == "" || v == "(devel)" || strings.Contains(v, "+") || pseudoVersion.MatchString(v) {
+		return "", false
+	}
+	return strings.TrimPrefix(v, "v"), true
+}
+
+func buildInfo() (string, string, string) {
+	v, c, d := version, commit, date
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return v, c, d
+	}
+	// Main.Version is the module version for `go install pkg@version`. Built
+	// from a working tree it is "(devel)" or a pseudo-version derived from
+	// the last tag — "1.1.1-0.20260903201147-848cbb466d36+dirty" — which is
+	// accurate but says "dev" more usefully.
+	if v == "dev" {
+		if release, ok := releaseVersion(info.Main.Version); ok {
+			v = release
+		}
+	}
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			if c == "none" && len(setting.Value) >= 7 {
+				c = setting.Value[:7]
+			}
+		case "vcs.time":
+			if d == "unknown" {
+				d = setting.Value
+			}
+		case "vcs.modified":
+			if setting.Value == "true" {
+				c += "-dirty"
+			}
+		}
+	}
+	return v, c, d
+}
 
 // usage is built at call time so it can name the actual configuration paths
 // on this machine rather than describing where they might be.
@@ -143,7 +192,8 @@ func run() error {
 	}
 
 	if opts.showVersion {
-		fmt.Printf("crv %s (%s, built %s)\n", version, commit, date)
+		v, c, d := buildInfo()
+		fmt.Printf("crv %s (%s, built %s)\n", v, c, d)
 		return nil
 	}
 

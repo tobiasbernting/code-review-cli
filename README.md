@@ -9,8 +9,12 @@ review — without leaving the terminal.
 ## Install
 
 ```sh
-go install github.com/tobiasbernting/code-review-cli/cmd/crv@latest
+go install github.com/tobiasbernting/code-review-cli/cmd/crv@latest   # or @main
 ```
+
+`@latest` is the newest tagged release; `@main` is the current main branch.
+Re-run the same command to update. `crv --version` reports which one you have,
+even for a `go install` build.
 
 Or download a binary for macOS, Linux or Windows from the
 [releases](https://github.com/tobiasbernting/code-review-cli/releases) page and
@@ -172,9 +176,13 @@ go test ./internal/render -update   # rewrite golden files
 ## Releasing
 
 Merging to `main` is the whole process. release-please gathers merged pull
-requests into a release pull request with a generated changelog; merging that
-tags the version, and the same workflow run cross-compiles for macOS, Linux and
-Windows and attaches the archives and checksums to the release.
+requests into a release pull request with a generated changelog. Merging that
+pull request makes the workflow tag the version, and the tag makes GoReleaser
+publish the release with binaries for macOS, Linux and Windows.
+
+The tag is the handover point on purpose: immutable releases are enabled on
+this repository, so a release cannot gain assets after it is published.
+Whoever creates it must create it complete, which has to be GoReleaser.
 
 If release-please's bookkeeping ever gets stuck, pushing a `v*` tag by hand
 builds and publishes that tag directly.
