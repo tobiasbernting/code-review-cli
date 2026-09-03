@@ -1,0 +1,23 @@
+diff --git a/greeter.go b/greeter.go
+index 1111111..2222222 100644
+--- a/greeter.go
++++ b/greeter.go
+@@ -1,7 +1,8 @@ package greeter
+ package greeter
+ 
+-func Greet(name string) string {
+-	return "hello " + name
++func Greet(name string, loud bool) string {
++	msg := "hello " + name
++	return msg
+ }
+diff --git a/notes.md b/notes.md
+new file mode 100644
+--- /dev/null
++++ b/notes.md
+@@ -0,0 +1,2 @@
++# Notes
++first line
+diff --git a/logo.png b/logo.png
+index 3333333..4444444 100644
+Binary files a/logo.png and b/logo.png differ

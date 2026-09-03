@@ -1,0 +1,20 @@
+ greeter.go
+ @@ -1,7 +1,8 @@ package greeter
+  1   1  package greeter
+  2   2
+  3     −func Greet(name string) string {
+  4     −    return "hello " + name
+      3 +func Greet(name string, loud bool) string {
+      4 +    msg := "hello " + name
+      5 +    return msg
+  5   6  }
+
+ notes.md
+   new file
+ @@ -0,0 +1,2 @@
+      1 +# Notes
+      2 +first line
+
+ logo.png
+   binary file — not shown
+
