@@ -2,8 +2,9 @@
 
 Review code without leaving the terminal.
 
-**Status: step 1 of the plan.** `crv` renders and navigates diffs. Notes,
-GitHub PR review and comment posting are not built yet.
+`crv` renders and navigates diffs, takes review notes on lines, shows what
+your teammates already said, and submits the whole thing to GitHub as one
+review — without leaving the terminal.
 
 ## Install
 
@@ -21,8 +22,12 @@ put it on your `PATH`. From a clone: `go build -o crv ./cmd/crv`.
 crv .                  # uncommitted work, including untracked files
 crv main...feature     # a revision range
 crv HEAD~3..HEAD
+crv 42                 # pull request 42, via gh
 crv . | less -R        # non-interactive: prints and exits
 ```
+
+Local reviews need only git. Pull requests need [gh](https://cli.github.com),
+which already knows your host and credentials — including an enterprise one.
 
 Untracked files are shown as additions on purpose: when reviewing generated
 code, the new files are usually the point of the change, and plain `git diff`
@@ -43,6 +48,17 @@ hides them.
 | `?` | help |
 | `q` | quit |
 
+Reviewing:
+
+| key | action |
+| --- | --- |
+| `c` | comment on this line |
+| `v` | start a multi-line selection, then move and press `c` |
+| `e` / `d` | edit / delete the note under the cursor |
+| `ctrl+e` | finish a note in `$EDITOR` instead |
+| `x` | mark this file reviewed |
+| `S` | submit the review to GitHub |
+
 ### Flags
 
 | flag | effect |
@@ -51,7 +67,52 @@ hides them.
 | `--no-color` | disable colour; `NO_COLOR` is honoured too |
 | `--no-untracked` | exclude untracked files |
 | `--width <n>` | output width when stdout is not a terminal |
+| `--host <name>` | GitHub hostname; defaults to gh's own configuration |
+| `--export markdown` | print this review's notes and exit |
+| `--config` | print the resolved configuration and exit |
 | `--version` | print version and exit |
+
+## Notes and reviews
+
+Notes are stored outside the repository — under `os.UserConfigDir()/crv` — so
+they never pollute a worktree that is shared or reset. They are keyed by pull
+request number, or by branch for local work, so an agent rewriting files
+underneath you does not orphan them.
+
+Each note records the blob hash of the file it was written against. When the
+file changes, the note is shown as **stale** and detached from its line rather
+than pointing at a line that has since moved. The same applies to a file marked
+reviewed: it keeps its tick and gains a `~`, because silently unticking would
+hide that you had already read it.
+
+Nothing is sent anywhere until you press `S`. GitHub reviews are atomic, so
+every note is posted as a single review with one event — comment, approve, or
+request changes — rather than as a stream of separate comments. Once submitted,
+the local copies are dropped: GitHub owns them from then on, which is what stops
+two versions of the same review from disagreeing.
+
+For a local review with no pull request to post to, `crv --export markdown`
+prints the notes for pasting wherever they need to go.
+
+## Configuration
+
+Optional. Settings are resolved from, highest priority first: command-line
+flags, `CRV_*` environment variables, `.crv.toml` in the repository, and
+`config.toml` beside the stored reviews. `crv --config` prints what won.
+
+```toml
+# .crv.toml — checked in, or not, as you prefer
+host = "github.example.com"   # default: whatever gh is configured with
+theme = "catppuccin-mocha"
+editor = "hx"
+untracked = true
+color = true
+width = 120
+```
+
+`host` is empty by default on purpose: gh already knows whether you are on
+github.com or an enterprise host, and a repository-local file is a better place
+to override that than global state you forget you set.
 
 ## Layout
 
@@ -61,6 +122,9 @@ hides them.
 | `internal/gitsrc` | shells out to `git` for diffs and stats |
 | `internal/render` | diffs → styled rows; syntax and word-level highlighting |
 | `internal/tui` | bubbletea viewport over those rows |
+| `internal/notes` | review notes and per-file marks on disk |
+| `internal/ghsrc` | pull requests, comments and review submission, via `gh` |
+| `internal/config` | settings resolution |
 
 `render` has no dependency on the TUI, which is what lets the same rows serve
 the interactive view, the piped output, and the golden-file tests.
@@ -104,8 +168,7 @@ goreleaser build --snapshot --clean
 
 ## Planned
 
-2. Local review notes, `--format=markdown` export
-3. `crv <pr>` — PR diffs via `gh`, teammates' comments rendered inline
-4. Submit a review (pending drafts → one GitHub review)
-5. `crv` with no argument — your review queue
-6. Mouse and OSC 52 yank
+- `crv` with no argument — the pull requests awaiting your review
+- Mouse support and OSC 52 yank
+- Replying to a teammate's comment thread
+- `LEFT`-side comments on deleted lines

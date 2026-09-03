@@ -1,12 +1,26 @@
 package tui
 
 import (
+	"path/filepath"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/tobiasbernting/code-review-cli/internal/config"
 	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
+	"github.com/tobiasbernting/code-review-cli/internal/notes"
 	"github.com/tobiasbernting/code-review-cli/internal/render"
 )
+
+// newTestReview is an in-memory review; Save is a no-op because the path is
+// inside the test's temporary directory.
+func newTestReview(t *testing.T) *notes.Review {
+	t.Helper()
+	r, err := notes.LoadAt(filepath.Join(t.TempDir(), "review.json"), "test-scope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
 
 // two files, the first with two hunks, so file jumps and hunk jumps are
 // distinguishable.
@@ -29,9 +43,13 @@ diff --git a/two.go b/two.go
 
 func newTestModel(t *testing.T) Model {
 	t.Helper()
-	files := diffparse.Parse(navDiff)
-	doc := render.Build(files, render.NewHighlighter("", false))
-	m := New(doc, render.DefaultTheme(), "test")
+	m := New(Options{
+		Files:  diffparse.Parse(navDiff),
+		Theme:  render.DefaultTheme(),
+		Config: config.Defaults(),
+		Source: Source{Kind: SourceLocal, Title: "test"},
+		Review: newTestReview(t),
+	})
 	// Deliberately shorter than the document, so scroll behaviour is exercised
 	// rather than clamped away.
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 6})

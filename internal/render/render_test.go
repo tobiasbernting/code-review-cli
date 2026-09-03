@@ -20,7 +20,7 @@ func TestRenderGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	files := diffparse.Parse(string(raw))
-	doc := Build(files, NewHighlighter(DefaultTheme().Syntax, true))
+	doc := Build(files, NewHighlighter(DefaultTheme().Syntax, true), Overlay{})
 	r := NewRenderer(DefaultTheme(), doc)
 
 	var b strings.Builder
@@ -52,7 +52,7 @@ func normalizeEOL(s string) string { return strings.ReplaceAll(s, "\r\n", "\n") 
 
 func TestBuildIndexesFilesAndHunks(t *testing.T) {
 	raw, _ := os.ReadFile(filepath.Join("testdata", "basic.diff"))
-	doc := Build(diffparse.Parse(string(raw)), NewHighlighter("", false))
+	doc := Build(diffparse.Parse(string(raw)), NewHighlighter("", false), Overlay{})
 
 	if len(doc.FileRows) != 3 {
 		t.Errorf("got %d file anchors, want 3", len(doc.FileRows))
@@ -76,7 +76,7 @@ func TestBuildIndexesFilesAndHunks(t *testing.T) {
 // Horizontal scrolling must not shift the gutter, only the code column.
 func TestRenderHorizontalScroll(t *testing.T) {
 	files := diffparse.Parse("diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1 +1 @@\n-abcdefghij\n+ABCDEFGHIJ\n")
-	doc := Build(files, NewHighlighter("", false))
+	doc := Build(files, NewHighlighter("", false), Overlay{})
 	r := NewRenderer(DefaultTheme(), doc)
 
 	var code Row
@@ -100,7 +100,7 @@ func TestRenderHorizontalScroll(t *testing.T) {
 
 func TestRenderExpandsTabs(t *testing.T) {
 	files := diffparse.Parse("diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1 +1 @@\n-x\n+\tx\n")
-	doc := Build(files, NewHighlighter("", false))
+	doc := Build(files, NewHighlighter("", false), Overlay{})
 	r := NewRenderer(DefaultTheme(), doc)
 	for _, row := range doc.Rows {
 		if row.Kind == RowCode && row.Line.Kind == diffparse.KindAdd {
