@@ -83,6 +83,7 @@ Reviewing:
 | `--export markdown` | print this review's notes and exit |
 | `--limit <n>` | how many pull requests the queue lists (default 30) |
 | `--config` | print the resolved configuration and exit |
+| `--init-config` | write a starter configuration file and exit |
 | `--version` | print version and exit |
 
 ## Notes and reviews
@@ -110,10 +111,21 @@ prints the notes for pasting wherever they need to go.
 
 ## Configuration
 
-Optional. Settings are resolved from, highest priority first: command-line
-flags, `CRV_*` environment variables, `.crv.toml` in the repository, and
+Optional — crv works with none. To start from a documented file:
+
+```sh
+crv --init-config          # writes ~/.config/crv/config.toml
+```
+
+Every setting in it is commented out, so nothing is overridden until you
+uncomment it. That is deliberate: a starter file listing real values would pin
+today's defaults forever, and a later change to one would never reach you.
+[`config.example.toml`](config.example.toml) is the same file, for reading here.
+
+Settings are resolved from, highest priority first: command-line flags, `CRV_*`
+environment variables, `.crv.toml` in the repository, and
 `~/.config/crv/config.toml`. `crv --config` prints what won and whether each
-file exists; `crv --help` shows the exact commands to create one.
+file exists.
 
 On Windows the directory is `%AppData%\crv`, where that convention applies
 instead.

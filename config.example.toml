@@ -1,0 +1,38 @@
+# crv configuration
+#
+# Every setting is optional and shown here with its current default.
+# Uncomment a line to override it — while a line stays commented, crv keeps
+# using its own default, including if that default changes in a later version.
+#
+# Precedence, highest first:
+#   1. command-line flags
+#   2. environment: CRV_HOST, CRV_THEME, CRV_EDITOR, CRV_WIDTH,
+#      CRV_UNTRACKED, CRV_COLOR, NO_COLOR
+#   3. .crv.toml in the repository being reviewed
+#   4. this file
+#
+# Run "crv --config" to see what is actually in effect.
+
+# GitHub hostname. Left unset, crv uses whatever gh is configured with, which
+# is usually what you want. Set it in a repository's .crv.toml to review
+# on an enterprise host without changing anything globally.
+# host = "github.example.com"
+
+# Syntax highlighting theme: any chroma style name.
+# See https://xyproto.github.io/splash/docs/ for the full list.
+# theme = "catppuccin-mocha"
+
+# Editor for composing longer notes with ctrl+e.
+# Unset, crv uses $VISUAL, then $EDITOR, then vi.
+# editor = "hx"
+
+# Include untracked files when reviewing uncommitted work with "crv .".
+# On, because new files are usually the substance of generated-code review.
+# untracked = true
+
+# Syntax highlighting and diff colours. NO_COLOR disables them whatever this
+# says.
+# color = true
+
+# Output width used when stdout is not a terminal.
+# width = 120

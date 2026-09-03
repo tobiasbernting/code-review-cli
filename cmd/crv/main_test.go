@@ -24,38 +24,10 @@ func TestUsageExplainsConfiguration(t *testing.T) {
 		"CRV_HOST", "NO_COLOR",
 		"host =", "theme =", "editor =", "untracked =", "color =", "width =",
 		"crv --config",
+		"crv --init-config",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("help text does not mention %q", want)
-		}
-	}
-}
-
-// The macOS config directory contains a space, so the commands the help
-// suggests have to survive being pasted into a shell.
-func TestUsageQuotesPathsForShell(t *testing.T) {
-	for _, line := range strings.Split(usage(), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "mkdir -p ") && !strings.HasPrefix(trimmed, "$EDITOR ") {
-			continue
-		}
-		arg := trimmed[strings.Index(trimmed, " ")+1:]
-		arg = strings.TrimPrefix(arg, "-p ")
-		if strings.Contains(arg, " ") && !strings.HasPrefix(arg, "'") {
-			t.Errorf("unquoted path with a space would break when pasted: %s", trimmed)
-		}
-	}
-}
-
-func TestShellQuote(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"/plain/path", "/plain/path"},
-		{"/has space/crv", "'/has space/crv'"},
-		{"/it's/here", `'/it'\''s/here'`},
-	}
-	for _, tc := range cases {
-		if got := shellQuote(tc.in); got != tc.want {
-			t.Errorf("shellQuote(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 }

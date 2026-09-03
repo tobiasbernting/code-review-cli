@@ -59,6 +59,7 @@ flags:
   --limit <n>        how many pull requests the queue lists (default 30)
   --export markdown  print the saved notes for this review and exit
   --config           print the resolved configuration and exit
+  --init-config      write a starter configuration file and exit
   --version          print version and exit
 
 configuration:
@@ -71,11 +72,10 @@ configuration:
     3. %s in the repository being reviewed
     4. %s
 
-  To create the user-level file (the quotes matter — the path contains a
-  space on macOS):
+  To create the user-level file, with every setting documented and
+  commented out:
 
-    mkdir -p %s
-    $EDITOR %s
+    crv --init-config
 
   Both files are TOML and every key is optional:
 
@@ -93,18 +93,7 @@ configuration:
   read. Review notes are kept in:
     %s
 
-`, config.RepoFile, userPath, shellQuote(filepath.Dir(userPath)), shellQuote(userPath),
-		config.RepoFile, notesDir)
-}
-
-// shellQuote makes a path safe to paste into a shell. macOS puts the config
-// directory under "Application Support", so a space is the common case rather
-// than an edge one.
-func shellQuote(path string) string {
-	if !strings.ContainsAny(path, " \t'\"$`\\") {
-		return path
-	}
-	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
+`, config.RepoFile, userPath, config.RepoFile, notesDir)
 }
 
 func main() {
@@ -125,6 +114,7 @@ type options struct {
 	noUntracked bool
 	showConfig  bool
 	showVersion bool
+	initConfig  bool
 	width       int
 	limit       int
 }
@@ -137,6 +127,7 @@ func registerFlags(fs *flag.FlagSet) *options {
 	fs.BoolVar(&o.noColor, "no-color", false, "disable colour")
 	fs.BoolVar(&o.noUntracked, "no-untracked", false, "exclude untracked files")
 	fs.BoolVar(&o.showConfig, "config", false, "print the resolved configuration")
+	fs.BoolVar(&o.initConfig, "init-config", false, "write a starter configuration file")
 	fs.BoolVar(&o.showVersion, "version", false, "print version and exit")
 	fs.IntVar(&o.width, "width", 0, "output width when not a terminal")
 	fs.IntVar(&o.limit, "limit", 30, "how many pull requests the queue lists")
@@ -154,6 +145,10 @@ func run() error {
 	if opts.showVersion {
 		fmt.Printf("crv %s (%s, built %s)\n", version, commit, date)
 		return nil
+	}
+
+	if opts.initConfig {
+		return initConfig()
 	}
 
 	// Earlier versions stored everything under os.UserConfigDir, which on
@@ -447,6 +442,23 @@ func printConfig(cfg config.Config, repoRoot string) error {
 	}
 	dir, _ := notes.Dir()
 	fmt.Printf("notes      %s\n", dir)
+	return nil
+}
+
+// initConfig writes the starter file, or explains why it did not.
+func initConfig() error {
+	path, err := config.Init()
+	switch {
+	case errors.Is(err, config.ErrConfigExists):
+		fmt.Printf("configuration already exists: %s\n", path)
+		fmt.Println("edit it, or delete it and run this again for a fresh copy")
+		return nil
+	case err != nil:
+		return err
+	}
+	fmt.Printf("wrote %s\n\n", path)
+	fmt.Println("every setting is commented out, so nothing is overridden until you")
+	fmt.Println("uncomment it — crv keeps using its own defaults, including if they change.")
 	return nil
 }
 
