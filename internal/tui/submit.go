@@ -80,13 +80,25 @@ func (m Model) handleSubmitKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "c":
 		m.submit.event = ghsrc.EventComment
 	case "a":
+		if m.src.OwnPR() {
+			m.err = "GitHub does not let you approve your own pull request"
+			return m, nil
+		}
 		m.submit.event = ghsrc.EventApprove
 	case "r":
+		if m.src.OwnPR() {
+			m.err = "GitHub does not let you request changes on your own pull request"
+			return m, nil
+		}
 		m.submit.event = ghsrc.EventRequestChanges
 	case "b":
 		m.submit.editing = true
 		m.in.start("review body ›", m.submit.body)
 	case "enter":
+		if m.src.OwnPR() && m.submit.event != ghsrc.EventComment {
+			m.err = "GitHub does not let you approve or request changes on your own pull request"
+			return m, nil
+		}
 		m.submit.sending = true
 		return m, m.sendReview()
 	}
@@ -157,7 +169,13 @@ func (m Model) submitView() string {
 		if m.submit.event == opt.event {
 			marker, style = "▸ ", sel
 		}
-		fmt.Fprintf(&b, "  %s%s  %s\n", marker, key.Render(opt.key), style.Render(opt.label))
+		label := opt.label
+		if m.src.OwnPR() && opt.event != ghsrc.EventComment {
+			label = dim.Render(opt.label + "  (not allowed on your own pull request)")
+		} else {
+			label = style.Render(label)
+		}
+		fmt.Fprintf(&b, "  %s%s  %s\n", marker, key.Render(opt.key), label)
 	}
 
 	body := m.submit.body

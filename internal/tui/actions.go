@@ -11,35 +11,35 @@ import (
 	"github.com/tobiasbernting/code-review-cli/internal/render"
 )
 
-// cursorLine is the file and new-side line the cursor sits on, or ok=false
-// when the cursor is not on a commentable line. Deleted lines are excluded:
-// only the RIGHT side is written today.
-func (m Model) cursorLine() (path string, line int, ok bool) {
+// cursorLine is the file, new-side line and hunk the cursor sits on, or
+// ok=false when the cursor is not on a commentable line. Deleted lines are
+// excluded: only the RIGHT side is written today.
+func (m Model) cursorLine() (path string, line, hunk int, ok bool) {
 	if m.cursor >= len(m.doc.Rows) {
-		return "", 0, false
+		return "", 0, -1, false
 	}
 	row := m.doc.Rows[m.cursor]
 	if row.FileIdx >= len(m.files) {
-		return "", 0, false
+		return "", 0, -1, false
 	}
 	path = m.files[row.FileIdx].Path()
 
 	switch row.Kind {
 	case render.RowCode:
 		if row.Line.NewNum == 0 {
-			return path, 0, false
+			return path, 0, row.HunkIdx, false
 		}
-		return path, row.Line.NewNum, true
+		return path, row.Line.NewNum, row.HunkIdx, true
 	case render.RowNote:
 		if row.Ann != nil && row.Ann.Line > 0 {
-			return path, row.Ann.Line, true
+			return path, row.Ann.Line, row.HunkIdx, true
 		}
 	}
-	return path, 0, false
+	return path, 0, row.HunkIdx, false
 }
 
 func (m Model) startComment() (tea.Model, tea.Cmd) {
-	path, line, ok := m.cursorLine()
+	path, line, hunk, ok := m.cursorLine()
 	if !ok {
 		m.err = "put the cursor on an added or unchanged line to comment"
 		return m, nil
@@ -49,6 +49,13 @@ func (m Model) startComment() (tea.Model, tea.Cmd) {
 	if m.rangeAnchor > 0 {
 		if m.rangeAnchorPath != path {
 			m.err = "the selection started in another file"
+			return m, nil
+		}
+		// GitHub requires both ends of a multi-line comment to sit in the
+		// same diff hunk, and rejects the whole review with a bare 422 when
+		// they do not.
+		if m.rangeAnchorHunk != hunk {
+			m.err = "a multi-line note cannot span two hunks — press v to clear the selection"
 			return m, nil
 		}
 		start = m.rangeAnchor
@@ -69,16 +76,16 @@ func (m Model) startComment() (tea.Model, tea.Cmd) {
 
 func (m Model) toggleRangeAnchor() (tea.Model, tea.Cmd) {
 	if m.rangeAnchor > 0 {
-		m.rangeAnchor, m.rangeAnchorPath = 0, ""
+		m.rangeAnchor, m.rangeAnchorPath, m.rangeAnchorHunk = 0, "", -1
 		m.status = "selection cleared"
 		return m, nil
 	}
-	path, line, ok := m.cursorLine()
+	path, line, hunk, ok := m.cursorLine()
 	if !ok {
 		m.err = "no line to select here"
 		return m, nil
 	}
-	m.rangeAnchor, m.rangeAnchorPath = line, path
+	m.rangeAnchor, m.rangeAnchorPath, m.rangeAnchorHunk = line, path, hunk
 	m.status = fmt.Sprintf("selecting from L%d — move, then press c", line)
 	return m, nil
 }
@@ -185,7 +192,7 @@ func (m *Model) commit(body string) {
 		m.status = "note added"
 	}
 
-	m.rangeAnchor, m.rangeAnchorPath = 0, ""
+	m.rangeAnchor, m.rangeAnchorPath, m.rangeAnchorHunk = 0, "", -1
 	m.pending = pendingNote{}
 	m.save()
 	m.rebuild()

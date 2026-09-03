@@ -68,6 +68,7 @@ type Model struct {
 	// selecting.
 	rangeAnchor     int
 	rangeAnchorPath string
+	rangeAnchorHunk int
 
 	// pending describes the note being composed.
 	pending pendingNote

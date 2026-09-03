@@ -90,3 +90,44 @@ func TestSubmitRejectsEmptyComment(t *testing.T) {
 		}
 	}
 }
+
+// GitHub is inconsistent about the errors field: the reviews endpoint returns
+// strings, validation failures elsewhere return objects. Both carry the only
+// useful part of a 422.
+func TestAPIErrorHandlesBothErrorShapes(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "string errors, as the reviews endpoint returns",
+			body: `{"message":"Unprocessable Entity","errors":["Review Can not approve your own pull request"],"status":"422"}`,
+			want: "Review Can not approve your own pull request",
+		},
+		{
+			name: "object errors",
+			body: `{"message":"Validation Failed","errors":[{"resource":"PullRequestReviewComment","field":"line","code":"invalid"}]}`,
+			want: "Validation Failed; PullRequestReviewComment line (invalid)",
+		},
+		{
+			name: "object errors carrying a message",
+			body: `{"message":"Validation Failed","errors":[{"message":"line must be part of the diff"}]}`,
+			want: "Validation Failed; line must be part of the diff",
+		},
+		{
+			name: "message only",
+			body: `{"message":"Not Found"}`,
+			want: "Not Found",
+		},
+		{name: "not json", body: "<html>502</html>", want: ""},
+		{name: "empty", body: "", want: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := apiError(tc.body); got != tc.want {
+				t.Errorf("apiError = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

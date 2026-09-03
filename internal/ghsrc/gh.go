@@ -215,7 +215,73 @@ func (c Client) runInput(stdin []byte, args ...string) (string, error) {
 		if msg == "" {
 			msg = err.Error()
 		}
+		// gh reports "Unprocessable Entity (HTTP 422)" and leaves the useful
+		// part — GitHub's own validation errors — in the response body on
+		// stdout. Without this a rejected review says nothing about why.
+		if detail := apiError(out.String()); detail != "" {
+			msg += ": " + detail
+		}
 		return "", fmt.Errorf("gh %s: %s", strings.Join(args, " "), msg)
 	}
 	return out.String(), nil
+}
+
+// apiError extracts GitHub's own explanation from an error response.
+//
+// The errors field is not one shape: the reviews endpoint returns an array of
+// strings ("Review Can not approve your own pull request"), while validation
+// failures elsewhere return objects with resource/field/code. Both are
+// handled, because the string form is exactly the case worth explaining.
+func apiError(body string) string {
+	body = strings.TrimSpace(body)
+	if body == "" || !strings.HasPrefix(body, "{") {
+		return ""
+	}
+	var resp struct {
+		Message string            `json:"message"`
+		Errors  []json.RawMessage `json:"errors"`
+	}
+	if err := json.Unmarshal([]byte(body), &resp); err != nil {
+		return ""
+	}
+
+	var parts []string
+	if resp.Message != "" && resp.Message != "Unprocessable Entity" {
+		parts = append(parts, resp.Message)
+	}
+	for _, raw := range resp.Errors {
+		if s := decodeError(raw); s != "" {
+			parts = append(parts, s)
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
+func decodeError(raw json.RawMessage) string {
+	var asString string
+	if err := json.Unmarshal(raw, &asString); err == nil {
+		return asString
+	}
+	var obj struct {
+		Resource string `json:"resource"`
+		Field    string `json:"field"`
+		Code     string `json:"code"`
+		Message  string `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return ""
+	}
+	if obj.Message != "" {
+		return obj.Message
+	}
+	if obj.Field != "" {
+		return fmt.Sprintf("%s %s (%s)", obj.Resource, obj.Field, obj.Code)
+	}
+	return ""
+}
+
+// Viewer is the login of the authenticated user.
+func (c Client) Viewer() (string, error) {
+	out, err := c.run("api", "user", "--jq", ".login")
+	return strings.TrimSpace(out), err
 }

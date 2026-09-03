@@ -92,6 +92,17 @@ type Source struct {
 	Repo     string // "owner/name", pull requests only
 	PRNumber int
 	Client   ghsrc.Client
+
+	// Author is the pull request's author and Viewer is you. GitHub rejects
+	// approving or requesting changes on your own pull request with a bare
+	// 422, so it is worth catching before the request is made.
+	Author string
+	Viewer string
+}
+
+// OwnPR reports whether you are the author of the pull request under review.
+func (s Source) OwnPR() bool {
+	return s.Author != "" && s.Viewer != "" && s.Author == s.Viewer
 }
 
 // CanSubmit reports whether this review can be sent to GitHub.

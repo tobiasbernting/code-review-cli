@@ -371,3 +371,112 @@ func hasNoteRow(m Model, body string) bool {
 	}
 	return false
 }
+
+// GitHub rejects approving your own pull request with a bare 422, so the
+// submit screen must not offer it.
+func TestCannotApproveOwnPullRequest(t *testing.T) {
+	m := newReviewModel(t, func(o *Options) {
+		o.Source = Source{
+			Kind: SourcePR, Repo: "acme/x", PRNumber: 1,
+			Author: "tobias", Viewer: "tobias",
+		}
+	})
+	m.review.Add("svc.go", 0, 3, "bbbbbbb", "a note")
+	m.rebuild()
+	m = press(t, m, "S")
+
+	for _, key := range []string{"a", "r"} {
+		got := press(t, m, key)
+		if got.submit.event != ghsrc.EventComment {
+			t.Errorf("%q selected %q on your own pull request", key, got.submit.event)
+		}
+		if !strings.Contains(got.err, "your own pull request") {
+			t.Errorf("%q gave no explanation: %q", key, got.err)
+		}
+	}
+
+	// Commenting on your own pull request is fine.
+	if got := press(t, m, "c"); got.submit.event != ghsrc.EventComment || got.err != "" {
+		t.Errorf("comment was refused on own pull request: %q", got.err)
+	}
+}
+
+func TestCanApproveSomeoneElsesPullRequest(t *testing.T) {
+	m := newReviewModel(t, func(o *Options) {
+		o.Source = Source{
+			Kind: SourcePR, Repo: "acme/x", PRNumber: 1,
+			Author: "ann", Viewer: "tobias",
+		}
+	})
+	m.review.Add("svc.go", 0, 3, "bbbbbbb", "a note")
+	m.rebuild()
+	m = press(t, m, "S")
+
+	if m = press(t, m, "a"); m.submit.event != ghsrc.EventApprove {
+		t.Errorf("approve was blocked on someone else's pull request: %q", m.err)
+	}
+}
+
+// Unknown identity must not block anything: failing to read the viewer should
+// degrade to GitHub's own validation, not to a refusal.
+func TestUnknownIdentityDoesNotBlockApproval(t *testing.T) {
+	m := newReviewModel(t, func(o *Options) {
+		o.Source = Source{Kind: SourcePR, Repo: "acme/x", PRNumber: 1, Author: "ann"}
+	})
+	m.review.Add("svc.go", 0, 3, "bbbbbbb", "a note")
+	m.rebuild()
+	m = press(t, m, "S")
+	if m = press(t, m, "a"); m.submit.event != ghsrc.EventApprove {
+		t.Error("approve was blocked when the viewer is unknown")
+	}
+}
+
+// GitHub requires both ends of a multi-line comment to be in the same hunk.
+const twoHunkDiff = `diff --git a/svc.go b/svc.go
+index aaaaaaa..bbbbbbb 100644
+--- a/svc.go
++++ b/svc.go
+@@ -1,3 +1,4 @@
+ package svc
++// first hunk
+ 
+@@ -40,3 +41,4 @@
+ func Other() {}
++// second hunk
+ 
+`
+
+func TestSelectionCannotSpanTwoHunks(t *testing.T) {
+	m := newReviewModel(t, func(o *Options) { o.Files = diffparse.Parse(twoHunkDiff) })
+
+	m = seekLine(t, m, 2) // first hunk
+	m = press(t, m, "v")
+	m = seekLine(t, m, 42) // second hunk
+	m = press(t, m, "c")
+
+	if m.mode == modeInput {
+		t.Error("a note spanning two hunks was allowed — GitHub rejects the whole review for this")
+	}
+	if !strings.Contains(m.err, "hunk") {
+		t.Errorf("err = %q, want it to explain the hunk boundary", m.err)
+	}
+}
+
+func TestSelectionWithinOneHunkIsAllowed(t *testing.T) {
+	m := newReviewModel(t, func(o *Options) { o.Files = diffparse.Parse(twoHunkDiff) })
+
+	m = seekLine(t, m, 1)
+	m = press(t, m, "v")
+	m = seekLine(t, m, 2)
+	m = press(t, m, "c")
+	if m.mode != modeInput {
+		t.Fatalf("a note inside one hunk was refused: %q", m.err)
+	}
+	m = typeText(t, m, "fine")
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+
+	if n := m.review.Notes[0]; n.StartLine != 1 || n.Line != 2 {
+		t.Errorf("note range = %d..%d, want 1..2", n.StartLine, n.Line)
+	}
+}

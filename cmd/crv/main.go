@@ -208,12 +208,21 @@ func resolvePR(repo *gitsrc.Repo, cfg config.Config, number int) (tui.Source, []
 	// hunks instead.
 	diffparse.FillStats(files)
 
+	// Knowing who you are lets the submit screen rule out approving your own
+	// pull request, which GitHub rejects with a bare 422.
+	viewer, err := client.Viewer()
+	if err != nil {
+		viewer = ""
+	}
+
 	src := tui.Source{
 		Kind:     tui.SourcePR,
 		Title:    fmt.Sprintf("%s#%d %s", name, pr.Number, pr.Title),
 		Repo:     name,
 		PRNumber: pr.Number,
 		Client:   client,
+		Author:   pr.Author.Login,
+		Viewer:   viewer,
 	}
 	return src, files, nil
 }
