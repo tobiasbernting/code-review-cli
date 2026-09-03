@@ -7,9 +7,7 @@
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": false,
   "packages": {
-    ".": {
-      "package-name": "crv"
-    }
+    ".": {}
   },
   "changelog-sections": [
     {
