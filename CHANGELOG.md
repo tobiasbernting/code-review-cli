@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/tobiasbernting/code-review-cli/compare/v1.0.0...v1.1.0) (2026-09-03)
+
+
+### Features
+
+* list the pull requests waiting on your review ([#9](https://github.com/tobiasbernting/code-review-cli/issues/9)) ([0acf50b](https://github.com/tobiasbernting/code-review-cli/commit/0acf50b6e1a8ef421a48802847e788639f855735))
+* take review notes and submit them to GitHub ([#8](https://github.com/tobiasbernting/code-review-cli/issues/8)) ([291c47c](https://github.com/tobiasbernting/code-review-cli/commit/291c47cd7bbd8f52d7ce23d8d42952ce48316938))
+
 ## 1.0.0 (2026-09-03)
 
 
