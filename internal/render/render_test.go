@@ -41,10 +41,14 @@ func TestRenderGolden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v (run: go test ./internal/render -update)", err)
 	}
-	if got != string(want) {
+	// .gitattributes keeps golden files LF, but normalise anyway so a stray
+	// CRLF checkout fails loudly on content rather than silently on Windows.
+	if got != normalizeEOL(string(want)) {
 		t.Errorf("render mismatch\n--- got ---\n%s\n--- want ---\n%s", got, want)
 	}
 }
+
+func normalizeEOL(s string) string { return strings.ReplaceAll(s, "\r\n", "\n") }
 
 func TestBuildIndexesFilesAndHunks(t *testing.T) {
 	raw, _ := os.ReadFile(filepath.Join("testdata", "basic.diff"))
