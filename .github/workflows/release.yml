@@ -6,7 +6,11 @@ name: release
 #
 # Tagging and building live in one workflow on purpose: a tag pushed by
 # GITHUB_TOKEN does not trigger other workflows, so a separate tag-triggered
-# release job would silently never run without a personal access token.
+# release job would silently never run.
+#
+# The same rule is why release-please needs RELEASE_PLEASE_TOKEN: a release
+# pull request opened with GITHUB_TOKEN gets no check runs, and main requires
+# ci and pr-title to pass, so it could never be merged.
 on:
   push:
     branches: [main]
@@ -26,6 +30,9 @@ jobs:
       - uses: googleapis/release-please-action@v5
         id: release
         with:
+          # Falls back to GITHUB_TOKEN so the workflow still runs without the
+          # secret — it just produces a release pull request nobody can merge.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
