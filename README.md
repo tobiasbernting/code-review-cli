@@ -67,6 +67,9 @@ the interactive view, the piped output, and the golden-file tests.
 
 ## Tests
 
+Run them before pushing — CI only checks that the project builds on all three
+platforms, it does not run the suite.
+
 ```sh
 go test ./...
 go test ./internal/render -update   # rewrite golden files
@@ -78,6 +81,9 @@ Merging to `main` is the whole process. release-please gathers merged pull
 requests into a release pull request with a generated changelog; merging that
 tags the version, and the same workflow run cross-compiles for macOS, Linux and
 Windows and attaches the archives and checksums to the release.
+
+If release-please's bookkeeping ever gets stuck, pushing a `v*` tag by hand
+builds and publishes that tag directly.
 
 Pull request titles must be conventional commits (`feat:`, `fix:`, `feat!:`)
 — the squash-merge title becomes the commit message release-please reads, and

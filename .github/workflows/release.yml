@@ -14,6 +14,9 @@ name: release
 on:
   push:
     branches: [main]
+    # A tag pushed by hand is the escape hatch when release-please's own
+    # bookkeeping gets stuck: it builds and publishes that tag directly.
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -22,6 +25,7 @@ permissions:
 
 jobs:
   release-please:
+    if: "!startsWith(github.ref, 'refs/tags/')"
     runs-on: ubuntu-latest
     outputs:
       released: ${{ steps.release.outputs.release_created }}
@@ -38,14 +42,20 @@ jobs:
 
   goreleaser:
     needs: release-please
-    if: needs.release-please.outputs.released == 'true'
+    # Runs either because release-please just cut a release, or because a tag
+    # was pushed by hand, in which case release-please above is skipped.
+    if: |
+      always() && (
+        needs.release-please.outputs.released == 'true' ||
+        startsWith(github.ref, 'refs/tags/')
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           # Build the tag release-please just created, not the branch head,
           # and take the full history so the version stamp is right.
-          ref: ${{ needs.release-please.outputs.tag }}
+          ref: ${{ needs.release-please.outputs.tag || github.ref }}
           fetch-depth: 0
 
       - uses: actions/setup-go@v7
