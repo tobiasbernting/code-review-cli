@@ -1,0 +1,54 @@
+name: release
+
+# release-please accumulates merged pull requests into a release pull request
+# with a generated changelog. Merging that pull request tags the version, and
+# the same run then builds and uploads the binaries.
+#
+# Tagging and building live in one workflow on purpose: a tag pushed by
+# GITHUB_TOKEN does not trigger other workflows, so a separate tag-triggered
+# release job would silently never run without a personal access token.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  goreleaser:
+    needs: release-please
+    if: needs.release-please.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Build the tag release-please just created, not the branch head,
+          # and take the full history so the version stamp is right.
+          ref: ${{ needs.release-please.outputs.tag }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

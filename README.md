@@ -8,8 +8,12 @@ GitHub PR review and comment posting are not built yet.
 ## Install
 
 ```sh
-go build -o crv ./cmd/crv
+go install github.com/tobiasbernting/code-review-cli/cmd/crv@latest
 ```
+
+Or download a binary for macOS, Linux or Windows from the
+[releases](https://github.com/tobiasbernting/code-review-cli/releases) page and
+put it on your `PATH`. From a clone: `go build -o crv ./cmd/crv`.
 
 ## Use
 
@@ -47,6 +51,7 @@ hides them.
 | `--no-color` | disable colour; `NO_COLOR` is honoured too |
 | `--no-untracked` | exclude untracked files |
 | `--width <n>` | output width when stdout is not a terminal |
+| `--version` | print version and exit |
 
 ## Layout
 
@@ -67,10 +72,30 @@ go test ./...
 go test ./internal/render -update   # rewrite golden files
 ```
 
+## Releasing
+
+Tagging is the whole process — `.github/workflows/release.yml` runs GoReleaser,
+which cross-compiles for macOS, Linux and Windows and attaches the archives
+and checksums to the GitHub release.
+
+```sh
+git tag -a v0.1.0 -m v0.1.0 && git push origin v0.1.0
+```
+
+No secrets to configure — the workflow's built-in `GITHUB_TOKEN` is enough to
+create the release.
+
+To check a change to the release setup without tagging:
+
+```sh
+goreleaser check
+goreleaser build --snapshot --clean
+```
+
 ## Planned
 
 2. Local review notes, `--format=markdown` export
 3. `crv <pr>` — PR diffs via `gh`, teammates' comments rendered inline
 4. Submit a review (pending drafts → one GitHub review)
 5. `crv` with no argument — your review queue
-6. Mouse, OSC 52 yank, GoReleaser releases and a Homebrew tap
+6. Mouse and OSC 52 yank

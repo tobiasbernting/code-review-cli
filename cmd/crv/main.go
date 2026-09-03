@@ -18,12 +18,21 @@ import (
 	"github.com/tobiasbernting/code-review-cli/internal/tui"
 )
 
+// Build metadata, injected by GoReleaser via -ldflags. The defaults are what
+// a plain `go build` produces.
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 const usage = `crv — review code in the terminal
 
 usage:
   crv .              review uncommitted work (including untracked files)
   crv <range>        review a range, e.g. main...feature or HEAD~3..HEAD
   crv --help
+  crv --version
 
 flags:
   --theme <name>     chroma syntax theme (default catppuccin-mocha)
@@ -41,13 +50,19 @@ func main() {
 
 func run() error {
 	var (
-		theme     = flag.String("theme", "", "chroma syntax theme")
-		noColor   = flag.Bool("no-color", false, "disable colour")
-		noUntrack = flag.Bool("no-untracked", false, "exclude untracked files")
-		widthFlag = flag.Int("width", 0, "output width when not a terminal")
+		theme       = flag.String("theme", "", "chroma syntax theme")
+		noColor     = flag.Bool("no-color", false, "disable colour")
+		noUntrack   = flag.Bool("no-untracked", false, "exclude untracked files")
+		widthFlag   = flag.Int("width", 0, "output width when not a terminal")
+		showVersion = flag.Bool("version", false, "print version and exit")
 	)
 	flag.Usage = func() { fmt.Fprint(os.Stderr, usage) }
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("crv %s (%s, built %s)\n", version, commit, date)
+		return nil
+	}
 
 	target := "."
 	if flag.NArg() > 0 {
