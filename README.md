@@ -74,16 +74,20 @@ go test ./internal/render -update   # rewrite golden files
 
 ## Releasing
 
-Tagging is the whole process — `.github/workflows/release.yml` runs GoReleaser,
-which cross-compiles for macOS, Linux and Windows and attaches the archives
-and checksums to the GitHub release.
+Merging to `main` is the whole process. release-please gathers merged pull
+requests into a release pull request with a generated changelog; merging that
+tags the version, and the same workflow run cross-compiles for macOS, Linux and
+Windows and attaches the archives and checksums to the release.
 
-```sh
-git tag -a v0.1.0 -m v0.1.0 && git push origin v0.1.0
-```
+Pull request titles must be conventional commits (`feat:`, `fix:`, `feat!:`)
+— the squash-merge title becomes the commit message release-please reads, and
+`pr-title.yml` rejects anything else before merge.
 
-No secrets to configure — the workflow's built-in `GITHUB_TOKEN` is enough to
-create the release.
+One secret is required: `RELEASE_PLEASE_TOKEN`, a fine-grained personal access
+token for this repository with **Contents: read and write** and **Pull
+requests: read and write**. GitHub deliberately does not trigger workflows for
+anything pushed with the built-in `GITHUB_TOKEN`, so a release pull request it
+opened would carry no check runs and could never satisfy the branch ruleset.
 
 To check a change to the release setup without tagging:
 
