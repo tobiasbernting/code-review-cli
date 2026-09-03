@@ -99,13 +99,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cursor = m.nextSelectable(len(m.doc.Rows)-1, -1)
 		m.clampScroll()
 	case "n":
-		m.jump(m.doc.HunkRows, 1)
+		m.jump(m.doc.HunkRows, 1, "hunk")
 	case "p":
-		m.jump(m.doc.HunkRows, -1)
-	case "]":
-		m.jump(m.doc.FileRows, 1)
-	case "[":
-		m.jump(m.doc.FileRows, -1)
+		m.jump(m.doc.HunkRows, -1, "hunk")
+	// tab is the primary file jump. ] and [ sit behind Alt on Nordic keyboard
+	// layouts, and J/K collide with the muscle memory for j/k. The aliases
+	// are kept because they cost nothing.
+	case "tab", "J", "]":
+		m.jump(m.doc.FileRows, 1, "file")
+	case "shift+tab", "K", "[":
+		m.jump(m.doc.FileRows, -1, "file")
 	case "l", "right":
 		m.hoffset += 8
 	case "h", "left":
@@ -181,31 +184,41 @@ func (m *Model) moveCursor(delta int) {
 	m.clampScroll()
 }
 
-func (m *Model) jump(anchors []int, dir int) {
+// jump moves the cursor to the next or previous anchor row, scrolling that
+// anchor to the top of the viewport so the file or hunk header is the first
+// thing read rather than appearing at the bottom edge.
+//
+// Backwards from mid-file lands on the *current* anchor first, matching how
+// a pager behaves: one press to reach the top of what you are reading, a
+// second to leave it.
+func (m *Model) jump(anchors []int, dir int, what string) {
 	if len(anchors) == 0 {
 		return
 	}
 	if dir > 0 {
 		for _, a := range anchors {
 			if a > m.cursor {
-				m.cursor = a
-				m.top = a
-				m.clampScroll()
+				m.seek(a)
 				return
 			}
 		}
-		m.status = "last one"
+		m.status = "last " + what
 		return
 	}
 	for i := len(anchors) - 1; i >= 0; i-- {
 		if anchors[i] < m.cursor {
-			m.cursor = anchors[i]
-			m.top = anchors[i]
-			m.clampScroll()
+			m.seek(anchors[i])
 			return
 		}
 	}
-	m.status = "first one"
+	m.status = "first " + what
+}
+
+// seek puts row at the top of the viewport with the cursor on it.
+func (m *Model) seek(row int) {
+	m.cursor = row
+	m.top = row
+	m.clampScroll()
 }
 
 func (m *Model) viewportHeight() int {
@@ -271,7 +284,12 @@ func (m Model) statusBar() string {
 	if m.status != "" {
 		left += "  · " + m.status
 	}
-	right := "? help  f files  q quit"
+	// The hints are the first thing to go when the window is narrow; the
+	// file position is what must always stay readable.
+	right := "tab file  n/p hunk  f list  ? help  q quit"
+	if m.width < 70 {
+		right = "? help  q quit"
+	}
 	if m.hoffset > 0 {
 		right = fmt.Sprintf("→%d  ", m.hoffset) + right
 	}
@@ -317,7 +335,8 @@ func (m Model) helpView() string {
 		{"j / k, ↓ / ↑", "move down / up"},
 		{"ctrl+d / ctrl+u", "half page down / up"},
 		{"n / p", "next / previous hunk"},
-		{"] / [", "next / previous file"},
+		{"tab / shift+tab", "next / previous file"},
+		{"J / K, ] / [", "next / previous file (aliases)"},
 		{"g / G", "top / bottom"},
 		{"h / l, ← / →", "scroll horizontally"},
 		{"0", "reset horizontal scroll"},

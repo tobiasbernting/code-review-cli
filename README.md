@@ -30,8 +30,9 @@ hides them.
 | --- | --- |
 | `j` / `k`, arrows | move |
 | `ctrl+d` / `ctrl+u` | half page |
+| `tab` / `shift+tab` | next / previous file |
 | `n` / `p` | next / previous hunk |
-| `]` / `[` | next / previous file |
+| `J` / `K`, `]` / `[` | next / previous file (aliases) |
 | `g` / `G` | top / bottom |
 | `h` / `l` | scroll horizontally, `0` to reset |
 | `f` | file list |
