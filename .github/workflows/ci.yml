@@ -1,0 +1,59 @@
+name: ci
+
+# Deliberately no pull_request trigger. This is a public repository, so a
+# pull_request workflow would let anyone with a fork run code on our runners.
+# Pushing a branch requires write access, which keeps CI to collaborators.
+# Re-add pull_request only alongside "Require approval for all outside
+# collaborators" in Settings > Actions > General.
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # The renderer is width- and terminal-sensitive, so it is worth proving the
+    # build on the platforms crv actually ships to rather than on linux alone.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - run: go vet ./...
+      - run: go test ./... -race
+
+  # A single check to require in the branch ruleset. Matrix jobs each produce
+  # their own context name, which would mean re-editing the ruleset every time
+  # the matrix changes.
+  ci:
+    if: always()
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: verify matrix succeeded
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "test matrix result: ${{ needs.test.result }}"
+            exit 1
+          fi

@@ -1,0 +1,65 @@
+# Release build for crv. Run `goreleaser check` after editing.
+version: 2
+project_name: crv
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: crv
+    main: ./cmd/crv
+    binary: crv
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .ShortCommit }}
+      - -X main.date={{ .CommitDate }}
+    # Reproducible builds: stamp the binary with the commit time, not now.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: crv
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+
+release:
+  # release-please has already created the release and written the changelog
+  # into its body; append mode adds the archives and install notes to it
+  # instead of failing on "release already exists".
+  mode: append
+  draft: false
+  prerelease: auto
+  footer: |
+    ## Install
+
+    Download the archive for your platform below, unpack it, and put `crv`
+    somewhere on your `PATH`. Verify it against `checksums.txt` first if you
+    care to.
+
+    Or build from source: `go install github.com/tobiasbernting/code-review-cli/cmd/crv@latest`

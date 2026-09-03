@@ -1,0 +1,8 @@
+# Normalise line endings in the repository so a Windows checkout does not
+# rewrite them.
+* text=auto eol=lf
+
+# Test fixtures and golden files are compared byte for byte. They must never
+# be converted, or the golden tests fail on Windows only.
+*.diff   -text
+*.golden -text
