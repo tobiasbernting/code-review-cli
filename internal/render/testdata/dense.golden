@@ -7,7 +7,7 @@
    12 │  12
 ▎  13 │     −     if err := s.authorize(ctx, r); err != nil {
 ┃     │  13 +     if err := s.authorise(ctx, r, s.policy); err != nil {
-▌             robin [resolution unavailable]: Spelling of authorise is inconsistent wit…
+▌             robin [resolution unavailable]: Spelling of authorise is inconsistent w…
 ▌             you: Check the policy argument is not nil before the call.
 
    14 │  14           http.Error(w, "forbidden", http.StatusForbidden)
@@ -40,7 +40,7 @@
     4 │   4
 ▎   5 │     − type Rule struct {
 ▎     │   5 + type Policy struct {
-▌             you L4-5: Renaming the type is fine; the package rename needs a deprecati…
+▌             you L4-5: Renaming the type is fine; the package rename needs a depreca…
 
     6 │   6       Name string
 

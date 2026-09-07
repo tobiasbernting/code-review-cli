@@ -115,6 +115,8 @@ Add and delete are stated three times over — edge marker, sign, row tint — s
 the diff still reads with colour disabled or unperceived, and so that focusing
 a row can lift its tone without erasing what kind of line it is. A `›` at the
 right edge means the line continues past it; `h` and `l` scroll to see it.
+Notes and review comments wrap to the terminal instead, hanging under their
+author's name, and rewrap when the window is resized.
 
 Themes are chosen, not detected: `dark`, `light` and `high-contrast` each set a
 background, so crv never has to guess what your terminal is and never guesses

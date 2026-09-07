@@ -79,7 +79,7 @@ func TestRenderDenseGolden(t *testing.T) {
 			switch {
 			case path == "internal/server/handler.go" && line == 13:
 				return []Annotation{
-					{Kind: AnnComment, Author: "robin", Body: "Spelling of authorise is inconsistent with the rest of the package.", Line: 13},
+					{Kind: AnnComment, Author: "robin", Body: "Spelling of authorise is inconsistent with the rest of the package, and the exported helper below still spells it the other way.", Line: 13},
 					{Kind: AnnNote, Body: "Check the policy argument is not nil before the call.", Line: 13},
 				}
 			case path == "internal/server/policy.go" && line == 5:

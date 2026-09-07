@@ -258,3 +258,64 @@ func countKind(d *Document, k RowKind) int {
 	}
 	return n
 }
+
+// A note longer than the terminal is wrapped where it is read: the label keeps
+// the first line, and the rest hangs under it so the block reads as one
+// paragraph rather than as several notes.
+func TestAnnotationWrapsUnderItsLabel(t *testing.T) {
+	doc, r := sampleDoc(t, Layout{})
+	body := "GitHub rejects the whole review with a bare 422 when both ends of a " +
+		"multi-line comment do not sit in the same hunk, so this wants a guard."
+	row := Row{Kind: RowNote, Ann: &Annotation{
+		Kind: AnnComment, Author: "robin", Body: body, ResolutionKnown: true,
+	}}
+
+	lines := r.RenderLines(row, 60, 0, false, 0)
+	if len(lines) < 2 {
+		t.Fatalf("a %d-column body rendered %d lines at width 60", len(body), len(lines))
+	}
+	for i, line := range lines {
+		if got := lipgloss.Width(line); got != 60 {
+			t.Errorf("line %d width = %d, want 60", i, got)
+		}
+		if !strings.HasPrefix(line, edgeNote) {
+			t.Errorf("line %d has no left marker: %q", i, line)
+		}
+	}
+	if strings.Contains(strings.Join(lines, ""), "…") {
+		t.Error("the body was truncated even though nothing limited the lines")
+	}
+	if indent(lines[1]) <= indent(lines[0]) {
+		t.Errorf("continuation does not hang under the label: %q then %q", lines[0], lines[1])
+	}
+	if indent(lines[0]) < doc.GutterWidth()-1 {
+		t.Errorf("annotation text starts before the code column: %q", lines[0])
+	}
+
+	// Away from the cursor the note is one line, and says it was cut.
+	compact := r.RenderLines(row, 60, 0, false, 1)
+	if len(compact) != 1 {
+		t.Fatalf("compact form rendered %d lines, want 1", len(compact))
+	}
+	if !strings.Contains(compact[0], "…") {
+		t.Errorf("compact form does not show that it was cut: %q", compact[0])
+	}
+}
+
+func TestSplitLabel(t *testing.T) {
+	for _, tc := range []struct{ in, label, body string }{
+		{"robin: needs a test", "robin: ", "needs a test"},
+		{"you [needs re-anchor]: moved", "you [needs re-anchor]: ", "moved"},
+		{"− thread · 2 comments [unresolved]", "", "− thread · 2 comments [unresolved]"},
+	} {
+		label, body := splitLabel(tc.in)
+		if label != tc.label || body != tc.body {
+			t.Errorf("splitLabel(%q) = %q, %q; want %q, %q", tc.in, label, body, tc.label, tc.body)
+		}
+	}
+}
+
+// indent is the column an annotation's text starts at, past its marker.
+func indent(line string) int {
+	return strings.IndexFunc(line, func(r rune) bool { return r != ' ' && r != []rune(edgeNote)[0] })
+}

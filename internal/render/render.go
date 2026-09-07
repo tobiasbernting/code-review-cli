@@ -32,7 +32,13 @@ import (
 	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
 )
 
-const tabWidth = 4
+const (
+	tabWidth = 4
+	// noteHang is how far the continuation lines of an annotation hang in
+	// from its first line, so a wrapped body reads as one paragraph rather
+	// than as several notes.
+	noteHang = 2
+)
 
 // The glyphs that carry meaning without colour.
 const (
@@ -721,11 +727,14 @@ func (r *Renderer) RenderLines(row Row, width, hoffset int, cursor bool, maxLine
 	}
 
 	indent := r.Doc.GutterWidth()
-	contentWidth := width - indent
+	// Continuation lines hang in from the first, so the block reads as one
+	// paragraph; the wrap has to leave room for that.
+	contentWidth := width - indent - noteHang
 	if contentWidth < 1 {
 		return []string{r.pad("", width, bg)}
 	}
-	wrapped := WrapText(annotationText(a, maxLines == 1), contentWidth)
+	label, body := splitLabel(annotationText(a, maxLines == 1))
+	wrapped := WrapText(label+body, contentWidth)
 	if maxLines > 0 && len(wrapped) > maxLines {
 		wrapped = wrapped[:maxLines]
 		if contentWidth == 1 {
@@ -735,15 +744,45 @@ func (r *Renderer) RenderLines(row Row, width, hoffset int, cursor bool, maxLine
 		}
 	}
 
+	bodyFg := t.NoteBodyFg
+	if a.NeedsReanchor || a.Outdated || a.Resolved {
+		bodyFg = t.StaleFg
+	}
+
 	lines := make([]string, 0, len(wrapped))
-	for _, line := range wrapped {
+	for i, line := range wrapped {
 		var b strings.Builder
 		b.WriteString(r.style(edgeFg, bg).Render(edgeNote))
-		b.WriteString(r.style("", bg).Render(strings.Repeat(" ", indent-1)))
-		b.WriteString(r.style(fg, bg).Render(clip(line, contentWidth)))
+		pad := indent - 1
+		if i > 0 {
+			pad += noteHang
+		}
+		b.WriteString(r.style("", bg).Render(strings.Repeat(" ", pad)))
+		// Who is speaking stays in the annotation's own colour and weight;
+		// what they said takes the body colour, so it reads like prose.
+		head := ""
+		if i == 0 && strings.HasPrefix(line, label) {
+			head = label
+			line = strings.TrimPrefix(line, label)
+		}
+		if head != "" {
+			b.WriteString(r.bold(fg, bg).Render(head))
+		}
+		b.WriteString(r.style(bodyFg, bg).Render(clip(line, contentWidth-lipgloss.Width(head))))
 		lines = append(lines, r.pad(b.String(), width, bg))
 	}
 	return lines
+}
+
+// splitLabel divides an annotation's first line into who is speaking and what
+// they said. Everything up to and including the first ": " is the label —
+// author, state badges, line range — which is exactly what annotationText
+// builds.
+func splitLabel(text string) (label, body string) {
+	if i := strings.Index(text, ": "); i >= 0 {
+		return text[:i+2], text[i+2:]
+	}
+	return "", text
 }
 
 // annotationText is everything an annotation says on one line before it is
