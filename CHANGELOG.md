@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/tobiasbernting/code-review-cli/compare/v1.3.0...v1.4.0) (2026-09-07)
+
+
+### Features
+
+* collapse viewed unchanged files ([#19](https://github.com/tobiasbernting/code-review-cli/issues/19)) ([f3affb5](https://github.com/tobiasbernting/code-review-cli/commit/f3affb5e02c377a7d194e4451a67fcebe6138f4b))
+
 ## [1.3.0](https://github.com/tobiasbernting/code-review-cli/compare/v1.2.0...v1.3.0) (2026-09-07)
 
 
