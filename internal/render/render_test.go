@@ -67,39 +67,8 @@ func checkGolden(t *testing.T, name, got string) {
 // a rename, a mode change, word-level changes, a line far wider than the
 // terminal, and a conversation of notes and comments hanging off the code.
 func TestRenderDenseGolden(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("testdata", "dense.diff"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	files := diffparse.Parse(string(raw))
-	diffparse.FillStats(files)
-
-	ov := Overlay{
-		At: func(path string, line int) []Annotation {
-			switch {
-			case path == "internal/server/handler.go" && line == 13:
-				return []Annotation{
-					{Kind: AnnComment, Author: "robin", Body: "Spelling of authorise is inconsistent with the rest of the package, and the exported helper below still spells it the other way.", Line: 13},
-					{Kind: AnnNote, Body: "Check the policy argument is not nil before the call.", Line: 13},
-				}
-			case path == "internal/server/policy.go" && line == 5:
-				return []Annotation{{Kind: AnnNote, Body: "Renaming the type is fine; the package rename needs a deprecation note.", StartLine: 4, Line: 5}}
-			}
-			return nil
-		},
-		Detached: func(path string) []AnnotationGroup {
-			if path == "internal/server/handler.go" {
-				return []AnnotationGroup{{
-					Title: "no longer anchored",
-					Items: []Annotation{{Kind: AnnComment, Author: "sam", Body: "This whole helper moved in the meantime.", Line: 42, Outdated: true, ResolutionKnown: true}},
-				}}
-			}
-			return nil
-		},
-		FileState: func(path string) (bool, bool) {
-			return path == "internal/server/policy.go", path == "internal/server/policy.go"
-		},
-	}
+	files := denseFiles(t)
+	ov := denseOverlay()
 
 	for _, tc := range []struct {
 		name    string
@@ -124,6 +93,51 @@ func TestRenderDenseGolden(t *testing.T) {
 			}
 			checkGolden(t, tc.golden, b.String())
 		})
+	}
+}
+
+// denseFiles is the fixture worth judging readability on: a rename, a mode
+// change, word-level changes, a line far wider than the terminal, and enough
+// hunks to show what density does.
+func denseFiles(t *testing.T) []*diffparse.FileDiff {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", "dense.diff"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := diffparse.Parse(string(raw))
+	diffparse.FillStats(files)
+	return files
+}
+
+// denseOverlay hangs a conversation off the fixture: two comments on one line,
+// a multi-line note, and one comment that no longer anchors anywhere.
+func denseOverlay() Overlay {
+	return Overlay{
+		At: func(path string, line int) []Annotation {
+			switch {
+			case path == "internal/server/handler.go" && line == 13:
+				return []Annotation{
+					{Kind: AnnComment, Author: "robin", Body: "Spelling of authorise is inconsistent with the rest of the package, and the exported helper below still spells it the other way.", Line: 13},
+					{Kind: AnnNote, Body: "Check the policy argument is not nil before the call.", Line: 13},
+				}
+			case path == "internal/server/policy.go" && line == 5:
+				return []Annotation{{Kind: AnnNote, Body: "Renaming the type is fine; the package rename needs a deprecation note.", StartLine: 4, Line: 5}}
+			}
+			return nil
+		},
+		Detached: func(path string) []AnnotationGroup {
+			if path == "internal/server/handler.go" {
+				return []AnnotationGroup{{
+					Title: "no longer anchored",
+					Items: []Annotation{{Kind: AnnComment, Author: "sam", Body: "This whole helper moved in the meantime.", Line: 42, Outdated: true, ResolutionKnown: true}},
+				}}
+			}
+			return nil
+		},
+		FileState: func(path string) (bool, bool) {
+			return path == "internal/server/policy.go", path == "internal/server/policy.go"
+		},
 	}
 }
 

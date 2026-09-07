@@ -6,6 +6,8 @@ Review code without leaving the terminal.
 your teammates already said, and submits the whole thing to GitHub as one
 review — without leaving the terminal.
 
+<img src="docs/img/theme-dark.svg" alt="crv reviewing a diff: added and deleted lines marked at the left edge, the cursor row lit, and two review comments wrapped under the line they belong to" width="100%">
+
 ## Install
 
 ```sh
@@ -125,6 +127,19 @@ method and type names — so diff state wins the page while code keeps its shape
 `--syntax` overrides the chroma style a theme comes with, and a `theme` naming
 a chroma style still means what it used to.
 
+<details>
+<summary>The same diff in <code>light</code> and <code>high-contrast</code></summary>
+
+<img src="docs/img/theme-light.svg" alt="the same diff in the light theme" width="100%">
+
+<img src="docs/img/theme-high-contrast.svg" alt="the same diff in the high-contrast theme, on a black background with intra-line changes underlined" width="100%">
+
+</details>
+
+[docs/rendering.md](docs/rendering.md) explains the row anatomy, the theme
+roles, syntax muting and the golden tests — read it before changing how any of
+this looks.
+
 ## Notes and reviews
 
 Notes are stored outside the repository — under `~/.config/crv`, or
@@ -215,6 +230,9 @@ to override that than global state you forget you set.
 
 `render` has no dependency on the TUI, which is what lets the same rows serve
 the interactive view, the piped output, and the golden-file tests.
+[docs/rendering.md](docs/rendering.md) is the guide to that package: row
+anatomy, theme roles, density, annotation wrapping, and how the screenshots
+above are generated.
 
 ## Tests
 
@@ -224,6 +242,9 @@ platforms, it does not run the suite.
 ```sh
 go test ./...
 go test ./internal/render -update   # rewrite golden files
+
+# regenerate the theme screenshots the README embeds
+go test ./internal/render -run TestWritePreviewSVG -preview docs/img
 ```
 
 ## Releasing
