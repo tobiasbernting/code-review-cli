@@ -157,6 +157,10 @@ func (m Model) handleThreadKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
+		if t.GraphQLID == "" {
+			m.err = "GitHub did not report this thread's resolution state; press r to retry"
+			return m, nil
+		}
 		if (!t.Resolved && !t.ViewerCanResolve) || (t.Resolved && !t.ViewerCanUnresolve) {
 			m.err = "GitHub does not allow you to change this thread's resolution"
 			return m, nil
@@ -164,7 +168,7 @@ func (m Model) handleThreadKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.follow.busy = true
 		client := m.src.Client
 		return m, func() tea.Msg {
-			err := client.SetThreadResolved(t.ID, !t.Resolved)
+			err := client.SetThreadResolved(t.GraphQLID, !t.Resolved)
 			return threadActionMsg{id: t.ID, resolved: !t.Resolved, err: err}
 		}
 	}
@@ -511,9 +515,10 @@ func (m Model) threadLines() []string {
 	lines = append(lines, "", " Replies:")
 	if len(t.Comments) < 2 {
 		appendText("No replies yet.")
-	}
-	for _, c := range t.Comments[1:] {
-		appendText(c.User.Login + ": " + c.Body)
+	} else {
+		for _, c := range t.Comments[1:] {
+			appendText(c.User.Login + ": " + c.Body)
+		}
 	}
 	lines = append(lines, "", " Current file context · "+shortSHA(m.src.HeadSHA)+":")
 	switch {

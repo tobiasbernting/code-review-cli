@@ -2,10 +2,10 @@ package tui
 
 import (
 	"fmt"
-	"github.com/tobiasbernting/code-review-cli/internal/followup"
 	"sort"
 
 	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
+	"github.com/tobiasbernting/code-review-cli/internal/followup"
 	"github.com/tobiasbernting/code-review-cli/internal/ghsrc"
 	"github.com/tobiasbernting/code-review-cli/internal/notes"
 	"github.com/tobiasbernting/code-review-cli/internal/render"
@@ -149,7 +149,9 @@ func threadAnnotations(thread ghsrc.Thread, opts OverlayOptions) []render.Annota
 		hasUpdated = hasUpdated || opts.UpdatedComments[comment.ID]
 	}
 	expanded := opts.Plain || hasNew || hasUpdated
-	if override, ok := opts.Expanded[thread.ID]; ok && !opts.Plain && !hasNew && !hasUpdated {
+	// An explicit toggle wins over the activity default, so a thread opened by
+	// new activity can still be collapsed by hand.
+	if override, ok := opts.Expanded[thread.ID]; ok && !opts.Plain {
 		expanded = override
 	} else if !expanded {
 		expanded = !thread.Resolved && (!thread.Outdated || thread.ResolutionKnown)

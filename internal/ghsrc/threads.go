@@ -14,16 +14,22 @@ import (
 type Thread struct {
 	OriginalLine, OriginalStartLine      int
 	ViewerCanResolve, ViewerCanUnresolve bool
-	ID                                   string
-	RootID                               int64
-	Path                                 string
-	Side                                 string
-	Line                                 int
-	StartLine                            int
-	Outdated                             bool
-	Resolved                             bool
-	ResolutionKnown                      bool
-	Comments                             []Comment
+
+	// ID is derived from the root comment, so it survives a GraphQL outage and
+	// is safe to persist. GraphQLID is the node ID the resolution mutations
+	// need, and is empty whenever the REST fallback was used.
+	ID        string
+	GraphQLID string
+
+	RootID          int64
+	Path            string
+	Side            string
+	Line            int
+	StartLine       int
+	Outdated        bool
+	Resolved        bool
+	ResolutionKnown bool
+	Comments        []Comment
 }
 
 // ThreadFeed is the complete set of review threads visible to the viewer.
@@ -87,7 +93,7 @@ func (c Client) Threads(repo string, number int) (ThreadFeed, error) {
 		thread := &threads[i]
 		thread.ViewerCanResolve = state.ViewerCanResolve
 		thread.ViewerCanUnresolve = state.ViewerCanUnresolve
-		thread.ID = state.ID
+		thread.GraphQLID = state.ID
 		thread.Path = state.Path
 		thread.Side = state.Side
 		thread.Line = state.Line

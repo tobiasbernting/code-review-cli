@@ -246,6 +246,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	m.status, m.err = "", ""
 	if m.follow.busy {
+		// Quitting stays available: a GitHub mutation can hang, and the review
+		// must not become impossible to leave while it does. Only ctrl+c does
+		// it while a note is being typed, where q is just a letter.
+		typing := m.mode == modeReply || m.mode == modeInput
+		if key == "ctrl+c" || (key == "q" && !typing) {
+			return m, tea.Quit
+		}
 		return m, nil
 	}
 
@@ -290,7 +297,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.mode = modeFiles
-		m.fileCursor = m.doc.Rows[m.cursor].FileIdx
+		// Orphaned annotations carry a FileIdx one past the last file, so the
+		// list would otherwise open with nothing selected.
+		m.fileCursor = min(m.doc.Rows[m.cursor].FileIdx, len(m.doc.Files)-1)
 	case "j", "down":
 		m.moveCursor(1)
 	case "k", "up":

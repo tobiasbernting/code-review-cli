@@ -23,7 +23,7 @@ func followupModel(t *testing.T) Model {
 		PR: &ghsrc.PR{Number: 42, HeadSHA: "head"}, Viewer: "reviewer",
 		Baseline: &ghsrc.SubmittedReview{CommitID: "baseline", SubmittedAt: time.Date(2026, 9, 7, 10, 0, 0, 0, time.UTC)},
 		Files:    diffparse.Parse(noteDiff),
-		Threads:  []ghsrc.Thread{{ID: "thread", Path: "svc.go", Line: 3, Resolved: true, ViewerCanResolve: true, ViewerCanUnresolve: true, Comments: []ghsrc.Comment{comment}}},
+		Threads:  []ghsrc.Thread{{ID: "thread", GraphQLID: "thread", Path: "svc.go", Line: 3, Resolved: true, ViewerCanResolve: true, ViewerCanUnresolve: true, Comments: []ghsrc.Comment{comment}}},
 		Comparison: &ghsrc.RevisionComparison{BaseSHA: "baseline", HeadSHA: "head", Diff: noteDiff,
 			HeadFiles: map[string]string{"svc.go": "100644:bbbbbbb"}},
 	}

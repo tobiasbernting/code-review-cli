@@ -18,6 +18,11 @@ type Session struct {
 	Comparison      *ghsrc.RevisionComparison
 	ComparisonError string
 	Warnings        []string
+
+	// comparisonFiles caches the parsed comparison diff. ChangesFor runs once
+	// per rendered frame, and reparsing the whole diff each time is visible as
+	// input lag on a large pull request.
+	comparisonFiles []*diffparse.FileDiff
 }
 
 // Load never labels a current PR diff as changes since an earlier review.
@@ -98,11 +103,19 @@ func (s *Session) ChangesFor(t ghsrc.Thread) []*diffparse.FileDiff {
 	}
 	path, _ := s.Evidence(t)
 	var files []*diffparse.FileDiff
-	for _, f := range diffparse.Parse(s.Comparison.Diff) {
+	for _, f := range s.comparisonDiff() {
 		if f.Path() == path || f.OldPath == t.Path || f.NewPath == t.Path {
 			files = append(files, f)
 		}
 	}
-	diffparse.FillStats(files)
 	return files
+}
+
+// comparisonDiff parses the comparison once and reuses it thereafter.
+func (s *Session) comparisonDiff() []*diffparse.FileDiff {
+	if s.comparisonFiles == nil && s.Comparison != nil {
+		s.comparisonFiles = diffparse.Parse(s.Comparison.Diff)
+		diffparse.FillStats(s.comparisonFiles)
+	}
+	return s.comparisonFiles
 }
