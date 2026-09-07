@@ -114,3 +114,18 @@ func TestRenderExpandsTabs(t *testing.T) {
 		}
 	}
 }
+
+func TestCommentStatesAreExplicit(t *testing.T) {
+	doc := &Document{gutterOld: 3, gutterNew: 3}
+	r := NewRenderer(DefaultTheme(), doc)
+	row := Row{Kind: RowNote, Ann: &Annotation{
+		Kind: AnnComment, Author: "ann", Body: "please revisit",
+		Outdated: true, Resolved: true, ResolutionKnown: true, New: true,
+	}}
+	out := strings.Join(r.RenderLines(row, 100, 0, false, 1), "\n")
+	for _, want := range []string{"ann", "[outdated]", "[resolved]", "[new]", "please revisit"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("rendered comment %q does not contain %q", out, want)
+		}
+	}
+}

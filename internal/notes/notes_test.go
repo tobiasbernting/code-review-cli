@@ -103,6 +103,21 @@ func TestDeleteAndUpdate(t *testing.T) {
 	}
 }
 
+func TestReanchorMovesNoteWithoutChangingContent(t *testing.T) {
+	r := newReview(t, "scope")
+	n := r.Add("old.go", 0, 4, "oldblob", "keep this body")
+	if !r.Reanchor(n.ID, "new.go", 8, 12, SideRight, "newblob") {
+		t.Fatal("Reanchor did not find the note")
+	}
+	got := r.Notes[0]
+	if got.ID != n.ID || got.Body != n.Body {
+		t.Errorf("identity or body changed: %+v", got)
+	}
+	if got.Path != "new.go" || got.StartLine != 8 || got.Line != 12 || got.Blob != "newblob" {
+		t.Errorf("anchor = %+v", got)
+	}
+}
+
 func TestStaleTracksBlob(t *testing.T) {
 	n := Note{Blob: "aaa"}
 	if Stale(n, "aaa") {
@@ -175,4 +190,69 @@ func reload(r *Review) error {
 		return err
 	}
 	return json.Unmarshal(data, r)
+}
+
+func TestThreadVerificationPersistsAndInvalidates(t *testing.T) {
+	r := newReview(t, "acme/x#1")
+	r.SetThreadVerified("thread-1", "relevant-code", "commit-one", true)
+	// No file marks or notes: thread verification alone must be saved.
+	if err := r.Save(); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadAt(r.path, r.Scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mark := loaded.Threads["thread-1"]
+	if mark.CommitID != "commit-one" || mark.VerifiedAt.IsZero() {
+		t.Fatalf("verification metadata did not survive reload: %+v", mark)
+	}
+	loaded.SetReviewed("unrelated.go", "changed-blob", true)
+	if verified, changed := loaded.ThreadState("thread-1", "relevant-code"); !verified || changed {
+		t.Fatalf("unrelated file change invalidated verification: %v/%v", verified, changed)
+	}
+	for _, fingerprint := range []string{"changed-code", ""} {
+		if verified, changed := loaded.ThreadState("thread-1", fingerprint); verified || !changed {
+			t.Errorf("fingerprint %q: verified=%v changed=%v; want false/true", fingerprint, verified, changed)
+		}
+	}
+	if loaded.Threads["thread-1"] != mark {
+		t.Error("invalidation discarded the previous verification metadata")
+	}
+	loaded.SetThreadVerified("thread-1", "changed-code", "commit-two", true)
+	if verified, changed := loaded.ThreadState("thread-1", "changed-code"); !verified || changed {
+		t.Error("re-verification did not accept the new code")
+	}
+	loaded.SetThreadVerified("thread-1", "", "", false)
+	if verified, changed := loaded.ThreadState("thread-1", "changed-code"); verified || changed {
+		t.Error("unverifying left a thread mark")
+	}
+}
+
+func TestThreadVerificationRejectsUnknownCode(t *testing.T) {
+	r := newReview(t, "scope")
+	for _, fingerprint := range []string{"", " \n"} {
+		r.SetThreadVerified("thread-1", fingerprint, "head", true)
+		if verified, _ := r.ThreadState("thread-1", fingerprint); verified || len(r.Threads) != 0 {
+			t.Errorf("unknown code %q was marked verified", fingerprint)
+		}
+	}
+}
+
+func TestOldReviewSchemaSupportsThreadVerification(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "review.json")
+	if err := os.WriteFile(path, []byte(`{"scope":"scope","notes":[],"files":{"a.go":{"reviewed":true,"blob":"abc"}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r, err := LoadAt(path, "scope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.SetThreadVerified("thread-1", "code", "head", true)
+	if err := r.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if reviewed, changed := r.ReviewState("a.go", "abc"); !reviewed || changed {
+		t.Error("existing file mark changed during migration")
+	}
 }

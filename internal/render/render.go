@@ -25,6 +25,7 @@ const (
 	RowHunk
 	RowCode
 	RowNote // a local note or an existing review comment
+	RowSection
 	RowSpacer
 )
 
@@ -79,8 +80,13 @@ func Build(files []*diffparse.FileDiff, h *Highlighter, ov Overlay) *Document {
 		}
 		// Detached annotations go directly under the header: they belong to
 		// this file but no longer to any line in it.
-		for _, a := range ov.detached(f.Path()) {
-			d.Rows = append(d.Rows, annotationRows(fi, -1, a, true)...)
+		for _, group := range ov.detached(f.Path()) {
+			d.Rows = append(d.Rows, Row{
+				Kind: RowSection, FileIdx: fi, HunkIdx: -1, Text: group.Title,
+			})
+			for _, a := range group.Items {
+				d.Rows = append(d.Rows, annotationRow(fi, -1, a))
+			}
 		}
 		if f.IsBinary {
 			d.Rows = append(d.Rows, Row{Kind: RowSpacer, FileIdx: fi, HunkIdx: -1})
@@ -104,25 +110,28 @@ func Build(files []*diffparse.FileDiff, h *Highlighter, ov Overlay) *Document {
 				// Annotations hang off the new-side line number, which is the
 				// coordinate GitHub review comments use.
 				for _, a := range ov.at(f.Path(), ln.NewNum) {
-					d.Rows = append(d.Rows, annotationRows(fi, hi, a, false)...)
+					d.Rows = append(d.Rows, annotationRow(fi, hi, a))
 				}
 			}
 		}
 		d.Rows = append(d.Rows, Row{Kind: RowSpacer, FileIdx: fi, HunkIdx: -1})
 	}
+	for _, group := range ov.orphaned() {
+		d.Rows = append(d.Rows, Row{
+			Kind: RowSection, FileIdx: len(files), HunkIdx: -1, Text: group.Title,
+		})
+		for _, a := range group.Items {
+			d.Rows = append(d.Rows, annotationRow(len(files), -1, a))
+		}
+	}
 	return d
 }
 
-// annotationRows turns one annotation into its rows. The body is stored
-// unwrapped: wrapping happens at paint time, because the terminal can be
-// resized after the document is built.
-func annotationRows(fileIdx, hunkIdx int, a Annotation, detached bool) []Row {
+// annotationRow keeps the body unwrapped: wrapping happens at paint time,
+// because the terminal can be resized after the document is built.
+func annotationRow(fileIdx, hunkIdx int, a Annotation) Row {
 	ann := a
-	if detached {
-		ann.Stale = true
-	}
-	rows := []Row{{Kind: RowNote, FileIdx: fileIdx, HunkIdx: hunkIdx, Ann: &ann}}
-	return rows
+	return Row{Kind: RowNote, FileIdx: fileIdx, HunkIdx: hunkIdx, Ann: &ann}
 }
 
 func (d *Document) trackGutter(ln diffparse.Line) {
@@ -282,6 +291,8 @@ func (r *Renderer) Render(row Row, width, hoffset int, cursor bool) string {
 		return r.fileRow(row, width)
 	case RowNote:
 		return r.noteRow(row, width, cursor)
+	case RowSection:
+		return r.pad(r.style(t.MetaFg, "").Bold(true).Render(clip("   "+row.Text, width)), width, "")
 	case RowMeta:
 		return r.pad(r.style(t.MetaFg, "").Render(clip("   "+row.Text, width)), width, "")
 	case RowHunk:
@@ -421,33 +432,33 @@ func (r *Renderer) fileRow(row Row, width int) string {
 	return r.pad(line, width, t.FileBg)
 }
 
-// noteRow draws one annotation under the line it belongs to, wrapped to the
-// available width.
+// noteRow draws the compact, one-line form used away from the cursor.
 func (r *Renderer) noteRow(row Row, width int, cursor bool) string {
+	lines := r.RenderLines(row, width, 0, cursor, 1)
+	if len(lines) == 0 {
+		return ""
+	}
+	return lines[0]
+}
+
+// RenderLines paints a row as one or more terminal lines. Only annotations
+// expand; maxLines <= 0 means no limit and is used by plain output.
+func (r *Renderer) RenderLines(row Row, width, hoffset int, cursor bool, maxLines int) []string {
+	if row.Kind != RowNote {
+		return []string{r.Render(row, width, hoffset, cursor)}
+	}
 	t := r.Theme
 	a := row.Ann
 	if a == nil {
-		return ""
+		return nil
 	}
 
 	fg := t.NoteFg
-	marker := "▌ "
 	switch {
-	case a.Stale:
+	case a.NeedsReanchor || a.Outdated || a.Resolved:
 		fg = t.StaleFg
-	case a.Kind == AnnComment:
+	case a.Kind == AnnComment || a.Kind == AnnThread:
 		fg = t.CommentFg
-	}
-
-	label := "you"
-	if a.Author != "" {
-		label = a.Author
-	}
-	if a.Stale {
-		label += " (stale)"
-	}
-	if a.StartLine > 0 && a.StartLine != a.Line {
-		label += fmt.Sprintf(" L%d-%d", a.StartLine, a.Line)
 	}
 
 	bg := t.NoteBg
@@ -456,13 +467,116 @@ func (r *Renderer) noteRow(row Row, width int, cursor bool) string {
 	}
 
 	indent := r.Doc.GutterWidth()
-	body := strings.Join(strings.Fields(strings.ReplaceAll(a.Body, "\n", " ")), " ")
-	text := marker + label + ": " + body
+	contentWidth := width - indent
+	if contentWidth < 1 {
+		return []string{r.pad("", width, bg)}
+	}
+	text := annotationText(a, maxLines == 1)
+	wrapped := WrapText(text, contentWidth)
+	if maxLines > 0 && len(wrapped) > maxLines {
+		wrapped = wrapped[:maxLines]
+		if contentWidth == 1 {
+			wrapped[maxLines-1] = "…"
+		} else {
+			wrapped[maxLines-1] = runewidth.Truncate(wrapped[maxLines-1], contentWidth-1, "") + "…"
+		}
+	}
 
-	var b strings.Builder
-	b.WriteString(r.style("", bg).Render(strings.Repeat(" ", indent)))
-	b.WriteString(r.style(fg, bg).Render(clip(text, width-indent)))
-	return r.pad(b.String(), width, bg)
+	lines := make([]string, 0, len(wrapped))
+	for _, line := range wrapped {
+		var b strings.Builder
+		b.WriteString(r.style("", bg).Render(strings.Repeat(" ", indent)))
+		b.WriteString(r.style(fg, bg).Render(clip(line, contentWidth)))
+		lines = append(lines, r.pad(b.String(), width, bg))
+	}
+	return lines
+}
+
+func annotationText(a *Annotation, compact bool) string {
+	if a.Kind == AnnThread {
+		marker := "− "
+		if a.Collapsed {
+			marker = "+ "
+		}
+		count := a.ReplyCount + 1
+		label := fmt.Sprintf("thread · %d comment%s", count, pluralWord(count))
+		if a.Outdated {
+			label += " [outdated]"
+		}
+		if !a.ResolutionKnown {
+			label += " [resolution unavailable]"
+		} else if a.Resolved {
+			label += " [resolved]"
+		} else {
+			label += " [unresolved]"
+		}
+		if a.New {
+			label += " [new]"
+		}
+		if a.Updated {
+			label += " [updated]"
+		}
+		if a.Collapsed && a.Body != "" {
+			label += ": " + a.Author + ": " + flatten(a.Body)
+		}
+		return marker + label
+	}
+
+	label := "you"
+	if a.Author != "" {
+		label = a.Author
+	}
+	if a.NeedsReanchor {
+		label += " [needs re-anchor]"
+	}
+	if a.Kind == AnnComment {
+		if a.Outdated {
+			label += " [outdated]"
+		}
+		if !a.ResolutionKnown {
+			label += " [resolution unavailable]"
+		} else if a.Resolved {
+			label += " [resolved]"
+		}
+	}
+	if a.New {
+		label += " [new]"
+	}
+	if a.Updated {
+		label += " [updated]"
+	}
+	if a.StartLine > 0 && a.StartLine != a.Line {
+		label += fmt.Sprintf(" L%d-%d", a.StartLine, a.Line)
+	}
+	body := a.Body
+	if compact {
+		body = flatten(body)
+	}
+	return "▌ " + label + ": " + body
+}
+
+func flatten(s string) string {
+	return strings.Join(strings.Fields(strings.ReplaceAll(s, "\n", " ")), " ")
+}
+
+func pluralWord(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
+// WrapText wraps without flattening explicit newlines or indentation.
+func WrapText(s string, width int) []string {
+	if width <= 0 {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		wrapped := runewidth.Wrap(line, width)
+		out = append(out, strings.Split(wrapped, "\n")...)
+	}
+	return out
 }
 
 func (r *Renderer) pad(s string, width int, bg string) string {

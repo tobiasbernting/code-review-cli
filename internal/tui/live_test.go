@@ -47,11 +47,11 @@ func TestLiveSubmit(t *testing.T) {
 		t.Fatal("the pull request has no files")
 	}
 
-	comments, err := client.Comments(repo, n)
+	feed, err := client.Threads(repo, n)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("pull request %s#%d: %d files, %d existing comments", repo, n, len(files), len(comments))
+	t.Logf("pull request %s#%d: %d files, %d existing threads", repo, n, len(files), len(feed.Threads))
 
 	review, err := notes.LoadAt(filepath.Join(t.TempDir(), "r.json"), notes.PRScope(repo, n))
 	if err != nil {
@@ -59,12 +59,12 @@ func TestLiveSubmit(t *testing.T) {
 	}
 
 	m := New(Options{
-		Files:    files,
-		Theme:    render.DefaultTheme(),
-		Config:   config.Defaults(),
-		Source:   Source{Kind: SourcePR, Repo: repo, PRNumber: n, Client: client},
-		Review:   review,
-		Comments: comments,
+		Files:   files,
+		Theme:   render.DefaultTheme(),
+		Config:  config.Defaults(),
+		Source:  Source{Kind: SourcePR, Repo: repo, PRNumber: n, Client: client},
+		Review:  review,
+		Threads: feed.Threads,
 	})
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = next.(Model)

@@ -73,7 +73,7 @@ type FileDiff struct {
 
 	// Blob hashes from the diff's index line. Notes anchor to NewBlob: when
 	// the file changes underneath a note, the hash no longer matches and the
-	// note is shown as stale rather than pointing at a line that moved.
+	// note is detached for re-anchoring rather than left on a line that moved.
 	OldBlob string
 	NewBlob string
 

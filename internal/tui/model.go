@@ -4,9 +4,11 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 	"github.com/tobiasbernting/code-review-cli/internal/config"
 	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
 	"github.com/tobiasbernting/code-review-cli/internal/ghsrc"
@@ -22,16 +24,22 @@ const (
 	modeHelp
 	modeInput
 	modeSubmit
+	modeComment
+	modeThreads
+	modeThread
+	modeReply
 )
 
 // Options are everything New needs that is not the diff itself.
 type Options struct {
-	Files    []*diffparse.FileDiff
-	Theme    render.Theme
-	Config   config.Config
-	Source   Source
-	Review   *notes.Review
-	Comments []ghsrc.Comment
+	Files     []*diffparse.FileDiff
+	Theme     render.Theme
+	Config    config.Config
+	Source    Source
+	Review    *notes.Review
+	Threads   []ghsrc.Thread
+	SyncedAt  time.Time
+	SyncError string
 }
 
 type Model struct {
@@ -44,12 +52,14 @@ type Model struct {
 	src    Source
 	review *notes.Review
 
-	// blobs maps a path to the hash of its new-side content, so notes can be
-	// anchored and staleness detected without re-reading the file.
+	// blobs maps a path to the hash of its new-side content, so changed drafts
+	// can be detached for re-anchoring without re-reading the file.
 	blobs map[string]string
 
-	// byLine indexes comments and notes for the renderer's overlay.
-	comments []ghsrc.Comment
+	threads         []ghsrc.Thread
+	expandedThreads map[string]bool
+	newComments     map[int64]bool
+	updatedComments map[int64]bool
 
 	width, height int
 	mode          mode
@@ -73,7 +83,13 @@ type Model struct {
 	// pending describes the note being composed.
 	pending pendingNote
 
-	submit submitState
+	follow      followupState
+	changesView bool
+	helpReturn  mode
+	submit      submitState
+	sync        syncState
+	detail      commentDetail
+	reanchor    reanchorState
 }
 
 type pendingNote struct {
@@ -85,15 +101,26 @@ type pendingNote struct {
 
 func New(opts Options) Model {
 	m := Model{
-		files:    opts.Files,
-		theme:    opts.Theme,
-		cfg:      opts.Config,
-		src:      opts.Source,
-		review:   opts.Review,
-		comments: opts.Comments,
-		width:    80,
-		height:   24,
-		hl:       render.NewHighlighter(opts.Theme.Syntax, opts.Config.Color),
+		files:           opts.Files,
+		theme:           opts.Theme,
+		cfg:             opts.Config,
+		src:             opts.Source,
+		review:          opts.Review,
+		threads:         opts.Threads,
+		width:           80,
+		height:          24,
+		hl:              render.NewHighlighter(opts.Theme.Syntax, opts.Config.Color),
+		expandedThreads: map[string]bool{},
+		newComments:     map[int64]bool{},
+		updatedComments: map[int64]bool{},
+	}
+	m.sync.syncedAt = opts.SyncedAt
+	m.sync.err = opts.SyncError
+	if opts.SyncError != "" {
+		m.sync.failedAt = time.Now()
+	}
+	if opts.Source.FollowUp != nil {
+		m.threads = opts.Source.FollowUp.Threads
 	}
 	m.blobs = Blobs(opts.Files)
 	if m.review == nil {
@@ -101,35 +128,73 @@ func New(opts Options) Model {
 	}
 	m.rebuild()
 	m.cursor = m.nextSelectable(0, 1)
+	m.installFollowUp(opts.Source.FollowUp)
 	return m
 }
 
 // rebuild regenerates the document after notes or marks change, keeping the
 // cursor on the same line rather than on the same row index.
 func (m *Model) rebuild() {
-	var anchorPath string
-	var anchorLine int
-	var anchorKind render.RowKind
-	if m.doc != nil && m.cursor < len(m.doc.Rows) {
-		row := m.doc.Rows[m.cursor]
-		anchorKind = row.Kind
-		if row.FileIdx < len(m.files) {
-			anchorPath = m.files[row.FileIdx].Path()
-		}
-		anchorLine = row.Line.NewNum
-	}
+	m.rebuildAt(m.cursorAnchor())
+}
 
+type documentAnchor struct {
+	path           string
+	line           int
+	rowKind        render.RowKind
+	annotationKind render.AnnotationKind
+	id             string
+}
+
+func (m Model) cursorAnchor() documentAnchor {
+	var anchor documentAnchor
+	if m.doc != nil && m.cursor >= 0 && m.cursor < len(m.doc.Rows) {
+		row := m.doc.Rows[m.cursor]
+		anchor.rowKind = row.Kind
+		if row.Ann != nil {
+			anchor.annotationKind = row.Ann.Kind
+			anchor.id = row.Ann.ID
+			anchor.line = row.Ann.Line
+		}
+		if row.FileIdx < len(m.files) {
+			anchor.path = m.files[row.FileIdx].Path()
+		}
+		if row.Ann == nil {
+			anchor.line = row.Line.NewNum
+		}
+	}
+	return anchor
+}
+
+func (m *Model) rebuildAt(anchor documentAnchor) {
 	m.doc = render.Build(m.files, m.hl, m.overlay())
 	m.rend = render.NewRenderer(m.theme, m.doc)
 
-	if anchorPath == "" {
+	if len(m.doc.Rows) == 0 {
+		m.cursor, m.top = 0, 0
+		return
+	}
+	if anchor.id != "" {
+		for i, row := range m.doc.Rows {
+			if row.Ann != nil && row.Ann.Kind == anchor.annotationKind && row.Ann.ID == anchor.id {
+				m.cursor = i
+				m.clampScroll()
+				return
+			}
+		}
+	}
+	if anchor.path == "" {
+		if m.cursor >= len(m.doc.Rows) {
+			m.cursor = m.nextSelectable(len(m.doc.Rows)-1, -1)
+		}
+		m.clampScroll()
 		return
 	}
 	for i, row := range m.doc.Rows {
-		if row.Kind != anchorKind || row.FileIdx >= len(m.files) {
+		if row.Kind != anchor.rowKind || row.FileIdx >= len(m.files) {
 			continue
 		}
-		if m.files[row.FileIdx].Path() == anchorPath && row.Line.NewNum == anchorLine {
+		if m.files[row.FileIdx].Path() == anchor.path && row.Line.NewNum == anchor.line {
 			m.cursor = i
 			m.clampScroll()
 			return
@@ -142,10 +207,16 @@ func (m *Model) rebuild() {
 }
 
 func (m *Model) overlay() render.Overlay {
-	return Overlay(m.review, m.comments, m.blobs)
+	if m.changesView {
+		return render.Overlay{}
+	}
+	return Overlay(m.review, m.threads, m.files, OverlayOptions{
+		Expanded: m.expandedThreads, NewComments: m.newComments,
+		UpdatedComments: m.updatedComments,
+	})
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd { return tickSyncAge() }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -157,6 +228,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applyEditorResult(msg)
 	case submitResultMsg:
 		return m.applySubmitResult(msg)
+	case threadActionMsg:
+		return m.applyThreadAction(msg)
+	case threadContextMsg:
+		return m.applyThreadContext(msg)
+	case syncResultMsg:
+		return m.applySyncResult(msg)
+	case syncTickMsg:
+		return m, tickSyncAge()
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -166,29 +245,61 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	m.status, m.err = "", ""
+	if m.follow.busy {
+		// Quitting stays available: a GitHub mutation can hang, and the review
+		// must not become impossible to leave while it does. Only ctrl+c does
+		// it while a note is being typed, where q is just a letter.
+		typing := m.mode == modeReply || m.mode == modeInput
+		if key == "ctrl+c" || (key == "q" && !typing) {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
 
 	switch m.mode {
+	case modeThreads, modeThread, modeReply:
+		return m.handleThreadKey(msg)
 	case modeInput:
 		return m.handleInputKey(msg)
 	case modeSubmit:
 		return m.handleSubmitKey(msg)
+	case modeComment:
+		return m.handleCommentKey(msg)
 	case modeHelp:
 		if key == "q" || key == "esc" || key == "?" {
-			m.mode = modeDiff
+			m.mode = m.helpReturn
 		}
 		return m, nil
 	case modeFiles:
 		return m.handleFilesKey(key)
 	}
+	if m.reanchor.id != "" {
+		return m.handleReanchorKey(key)
+	}
 
 	switch key {
 	case "q", "ctrl+c":
 		return m, tea.Quit
+	case "t":
+		if m.follow.session != nil {
+			m.mode = modeThreads
+		}
+	case "a":
+		return m.showChanges()
+	case "D":
+		m.showCurrentDiff("")
 	case "?":
+		m.helpReturn = m.mode
 		m.mode = modeHelp
 	case "f":
+		if len(m.doc.Rows) == 0 || len(m.doc.Files) == 0 {
+			m.err = "no files"
+			return m, nil
+		}
 		m.mode = modeFiles
-		m.fileCursor = m.doc.Rows[m.cursor].FileIdx
+		// Orphaned annotations carry a FileIdx one past the last file, so the
+		// list would otherwise open with nothing selected.
+		m.fileCursor = min(m.doc.Rows[m.cursor].FileIdx, len(m.doc.Files)-1)
 	case "j", "down":
 		m.moveCursor(1)
 	case "k", "up":
@@ -200,9 +311,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "g", "home":
 		m.cursor = m.nextSelectable(0, 1)
 		m.clampScroll()
+		m.visitCurrentThread()
 	case "G", "end":
 		m.cursor = m.nextSelectable(len(m.doc.Rows)-1, -1)
 		m.clampScroll()
+		m.visitCurrentThread()
 	case "n":
 		m.jump(m.doc.HunkRows, 1, "hunk")
 	case "p":
@@ -220,6 +333,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "0":
 		m.hoffset = 0
+	case "r":
+		return m.startSync(nil)
+	case "N":
+		m.jumpActivity(1)
+	case "P":
+		m.jumpActivity(-1)
+	case "enter":
+		return m.openOrToggleComment()
 
 	// review actions
 	case "c":
@@ -230,6 +351,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.editNoteUnderCursor()
 	case "d":
 		return m.deleteNoteUnderCursor()
+	case "m":
+		return m.startReanchor()
 	case "x":
 		return m.toggleReviewed()
 	case "S":
@@ -255,9 +378,9 @@ func (m Model) handleFilesKey(key string) (tea.Model, tea.Cmd) {
 	case "g", "home":
 		m.fileCursor = 0
 	case "G", "end":
-		m.fileCursor = len(m.doc.Files) - 1
+		m.fileCursor = maxInt(0, len(m.doc.Files)-1)
 	case "x":
-		if m.fileCursor < len(m.files) {
+		if m.fileCursor >= 0 && m.fileCursor < len(m.files) {
 			path := m.files[m.fileCursor].Path()
 			reviewed, _ := m.review.ReviewState(path, m.blobs[path])
 			m.review.SetReviewed(path, m.blobs[path], !reviewed)
@@ -265,7 +388,7 @@ func (m Model) handleFilesKey(key string) (tea.Model, tea.Cmd) {
 			m.rebuild()
 		}
 	case "enter", " ":
-		if len(m.doc.FileRows) > m.fileCursor {
+		if m.fileCursor >= 0 && len(m.doc.FileRows) > m.fileCursor {
 			m.cursor = m.nextSelectable(m.doc.FileRows[m.fileCursor], 1)
 			m.top = m.doc.FileRows[m.fileCursor]
 			m.clampScroll()
@@ -293,6 +416,9 @@ func (m Model) nextSelectable(from, dir int) int {
 }
 
 func (m *Model) moveCursor(delta int) {
+	if len(m.doc.Rows) == 0 {
+		return
+	}
 	target := m.cursor + delta
 	if target < 0 {
 		target = 0
@@ -306,6 +432,7 @@ func (m *Model) moveCursor(delta int) {
 	}
 	m.cursor = m.nextSelectable(target, dir)
 	m.clampScroll()
+	m.visitCurrentThread()
 }
 
 // jump moves the cursor to the next or previous anchor row, scrolling that
@@ -339,6 +466,7 @@ func (m *Model) seek(row int) {
 	m.cursor = row
 	m.top = row
 	m.clampScroll()
+	m.visitCurrentThread()
 }
 
 func (m *Model) viewportHeight() int {
@@ -354,13 +482,17 @@ func (m *Model) viewportHeight() int {
 
 func (m *Model) clampScroll() {
 	vh := m.viewportHeight()
+	rowHeight := 1
+	if m.cursor >= 0 && m.cursor < len(m.doc.Rows) && m.doc.Rows[m.cursor].Kind == render.RowNote {
+		rowHeight = len(m.rend.RenderLines(m.doc.Rows[m.cursor], m.width, m.hoffset, true, 8))
+	}
 	if m.cursor < m.top {
 		m.top = m.cursor
 	}
-	if m.cursor >= m.top+vh {
-		m.top = m.cursor - vh + 1
+	if m.cursor+rowHeight > m.top+vh {
+		m.top = m.cursor + rowHeight - vh
 	}
-	if maxTop := len(m.doc.Rows) - vh; m.top > maxTop {
+	if maxTop := len(m.doc.Rows) + rowHeight - 1 - vh; m.top > maxTop {
 		m.top = maxTop
 	}
 	if m.top < 0 {
@@ -376,6 +508,10 @@ func (m Model) View() string {
 		return m.filesView()
 	case modeSubmit:
 		return m.submitView()
+	case modeThreads, modeThread, modeReply:
+		return m.followupView()
+	case modeComment:
+		return m.commentView()
 	}
 	return m.diffView()
 }
@@ -383,14 +519,25 @@ func (m Model) View() string {
 func (m Model) diffView() string {
 	vh := m.viewportHeight()
 	var b strings.Builder
-	for i := 0; i < vh; i++ {
-		idx := m.top + i
-		if idx >= len(m.doc.Rows) {
-			b.WriteString("\n")
-			continue
+	written := 0
+	for idx := m.top; idx < len(m.doc.Rows) && written < vh; idx++ {
+		maxLines := 1
+		if idx == m.cursor {
+			maxLines = 8
 		}
-		b.WriteString(m.rend.Render(m.doc.Rows[idx], m.width, m.hoffset, idx == m.cursor))
+		lines := m.rend.RenderLines(m.doc.Rows[idx], m.width, m.hoffset, idx == m.cursor, maxLines)
+		for _, line := range lines {
+			if written >= vh {
+				break
+			}
+			b.WriteString(line)
+			b.WriteString("\n")
+			written++
+		}
+	}
+	for written < vh {
 		b.WriteString("\n")
+		written++
 	}
 	if m.mode == modeInput {
 		b.WriteString(m.in.render(m.width, m.theme.NoteFg, m.theme.NoteBg))
@@ -402,7 +549,15 @@ func (m Model) diffView() string {
 
 func (m Model) statusBar() string {
 	if len(m.doc.Rows) == 0 {
-		return bar(m.theme, m.width, " no changes", "? help  q quit")
+		left := " no changes" + m.syncStatus()
+		if m.changesView {
+			left = " no changes since your latest review" + m.syncStatus()
+		}
+		return bar(m.theme, m.width, left, fitHint(m.width, left, []string{
+			"r sync  ? help  q quit",
+			"r sync  ? help",
+			"? help",
+		}))
 	}
 	row := m.doc.Rows[m.cursor]
 	name := ""
@@ -410,7 +565,13 @@ func (m Model) statusBar() string {
 		name = m.doc.Files[row.FileIdx].Path()
 	}
 
-	left := fmt.Sprintf(" [%d/%d] %s", row.FileIdx+1, len(m.doc.Files), name)
+	left := " review"
+	if row.FileIdx < len(m.doc.Files) {
+		left = fmt.Sprintf(" [%d/%d] %s", row.FileIdx+1, len(m.doc.Files), name)
+	}
+	if m.changesView {
+		left = " since review " + shortSHA(m.src.HeadSHA) + " ·" + left
+	}
 	if n := len(m.review.Notes); n > 0 {
 		left += fmt.Sprintf("  ·  %d note%s", n, plural(n))
 	}
@@ -423,15 +584,82 @@ func (m Model) statusBar() string {
 	case m.status != "":
 		left += "  ·  " + m.status
 	}
+	left += m.syncStatus()
 
-	right := "c note  x reviewed  ? help  q quit"
+	return bar(m.theme, m.width, left, fitHint(m.width, left, m.hintKeys()))
+}
+
+// hintKeys is every screen's key hints in one place, most detailed first so
+// fitHint can drop the least useful ones on a narrow terminal. The order is
+// fixed per screen rather than per state, so the bar does not reshuffle as the
+// review progresses, and every screen below the diff ends with the way back,
+// so no view is a dead end.
+func (m Model) hintKeys() []string {
+	switch m.mode {
+	case modeThreads:
+		return []string{
+			"enter open  x verify  a changes  D PR diff  r sync  esc back  ? help",
+			"enter open  x verify  a changes  esc back  ? help",
+			"enter open  x verify  esc back  ? help",
+			"esc back  ? help",
+		}
+	case modeThread:
+		return []string{
+			"x verify  c reply  R resolve/reopen  n/p thread  esc back  ? help",
+			"x verify  c reply  R resolve/reopen  esc back  ? help",
+			"x verify  c reply  esc back  ? help",
+			"esc back  ? help",
+		}
+	case modeFiles:
+		return []string{
+			"enter open  x reviewed  esc back  ? help",
+			"enter open  x reviewed  esc back",
+			"esc back",
+		}
+	case modeComment:
+		return []string{
+			"j/k scroll  esc back",
+			"esc back",
+		}
+	}
 	if m.src.CanSubmit() {
-		right = "c note  S submit  ? help  q quit"
+		return []string{
+			"c note  x reviewed  t threads  a changes  D PR diff  r sync  S submit  ? help  q quit",
+			"c note  x reviewed  t threads  r sync  S submit  ? help  q quit",
+			"c note  x reviewed  S submit  ? help",
+			"c note  S submit  ? help",
+			"? help",
+		}
 	}
-	if m.width < 70 {
-		right = "? help  q quit"
+	return []string{
+		"c note  x reviewed  ? help  q quit",
+		"c note  x reviewed  ? help",
+		"c note  ? help",
+		"? help",
 	}
-	return bar(m.theme, m.width, left, right)
+}
+
+// fitHint picks the most detailed key hints that still leave a gap beside left.
+func fitHint(width int, left string, hints []string) string {
+	for _, h := range hints {
+		if width-lipgloss.Width(left)-lipgloss.Width(h)-1 >= 2 {
+			return h
+		}
+	}
+	return ""
+}
+
+func (m Model) syncStatus() string {
+	switch {
+	case m.sync.syncing:
+		return "  ·  syncing…"
+	case m.sync.err != "":
+		return "  ·  sync failed " + age(m.sync.failedAt) + ": " + m.sync.err
+	case !m.sync.syncedAt.IsZero():
+		return "  ·  synced " + age(m.sync.syncedAt)
+	default:
+		return ""
+	}
 }
 
 func (m Model) filesView() string {
@@ -468,8 +696,8 @@ func (m Model) filesView() string {
 		b.WriteString(st.Render(pad(line, m.width)))
 		b.WriteString("\n")
 	}
-	b.WriteString(bar(m.theme, m.width,
-		fmt.Sprintf(" %d files", len(m.doc.Files)), "enter open  x reviewed  esc back"))
+	left := fmt.Sprintf(" %d files", len(m.doc.Files))
+	b.WriteString(bar(m.theme, m.width, left, fitHint(m.width, left, m.hintKeys())))
 	return b.String()
 }
 
@@ -492,6 +720,8 @@ func statusLabel(f *diffparse.FileDiff) string {
 
 func (m Model) helpView() string {
 	rows := [][2]string{
+		{"t / a / D", "your threads / changes since review / current PR diff"},
+		{"threads: x / c / R", "verify locally / reply / resolve or reopen on GitHub"},
 		{"j / k, ↓ / ↑", "move down / up"},
 		{"ctrl+d / ctrl+u", "half page down / up"},
 		{"n / p", "next / previous hunk"},
@@ -500,15 +730,20 @@ func (m Model) helpView() string {
 		{"g / G", "top / bottom"},
 		{"h / l, ← / →", "scroll horizontally, 0 resets"},
 		{"f", "file list"},
+		{"r", "sync the pull request diff and threads"},
+		{"N / P", "next / previous thread with new activity"},
 		{"", ""},
 		{"c", "comment on this line"},
 		{"v", "start / clear a multi-line selection"},
 		{"e", "edit the note under the cursor"},
 		{"d", "delete the note under the cursor"},
+		{"m", "re-anchor a detached local draft"},
+		{"enter", "expand a thread or open a comment"},
 		{"x", "mark this file reviewed"},
 		{"ctrl+e", "compose in $EDITOR while writing a note"},
 		{"S", "submit the review to GitHub"},
 		{"", ""},
+		{"esc", "back to the diff from threads, files or a comment"},
 		{"?", "this help"},
 		{"q", "quit"},
 	}
@@ -538,7 +773,9 @@ func bar(t render.Theme, width int, left, right string) string {
 }
 
 func pad(s string, width int) string {
-	if w := lipgloss.Width(s); w < width {
+	if w := lipgloss.Width(s); w > width {
+		return runewidth.Truncate(s, width, "…")
+	} else if w < width {
 		return s + strings.Repeat(" ", width-w)
 	}
 	return s
