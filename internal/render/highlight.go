@@ -14,6 +14,11 @@ import (
 type Segment struct {
 	Text string
 	Fg   string // "#rrggbb", or "" for the terminal default
+
+	// Emph marks the tokens that carry the most meaning when skimming code —
+	// function, method, class and type names. The renderer mutes syntax so
+	// diff state wins the page, and mutes these less than the rest.
+	Emph bool
 }
 
 // Highlighter tokenises source with chroma. It highlights a whole hunk side at
@@ -73,6 +78,7 @@ func (h *Highlighter) Lines(path, source string) [][]Segment {
 		if e := h.style.Get(tok.Type); e.Colour.IsSet() {
 			fg = e.Colour.String()
 		}
+		emph := emphasised(tok.Type)
 		parts := strings.Split(tok.Value, "\n")
 		for i, p := range parts {
 			if i > 0 {
@@ -80,7 +86,7 @@ func (h *Highlighter) Lines(path, source string) [][]Segment {
 			}
 			if p != "" {
 				last := len(out) - 1
-				out[last] = append(out[last], Segment{Text: p, Fg: fg})
+				out[last] = append(out[last], Segment{Text: p, Fg: fg, Emph: emph})
 			}
 		}
 	}
@@ -97,6 +103,21 @@ func (h *Highlighter) Lines(path, source string) [][]Segment {
 	h.cache[key] = out
 	h.mu.Unlock()
 	return out
+}
+
+// emphasised reports whether a token type names something — a function, a
+// type, a class — as opposed to punctuation, keywords or literals. Names are
+// what the eye looks for when scanning an unfamiliar diff, so they keep more
+// of their colour when the rest of the syntax is muted.
+func emphasised(t chroma.TokenType) bool {
+	switch t {
+	case chroma.NameFunction, chroma.NameFunctionMagic, chroma.NameClass,
+		chroma.NameNamespace, chroma.NameException, chroma.NameDecorator,
+		chroma.NameTag, chroma.NameBuiltin, chroma.NameBuiltinPseudo,
+		chroma.KeywordType:
+		return true
+	}
+	return false
 }
 
 func (h *Highlighter) lexerFor(path string) chroma.Lexer {

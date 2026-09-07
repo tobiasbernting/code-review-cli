@@ -157,6 +157,11 @@ func (m QueueModel) View() string {
 
 	header := lipgloss.NewStyle().Background(lipgloss.Color(t.FileBg)).
 		Foreground(lipgloss.Color(t.FileFg)).Bold(true)
+	// The queue paints its own surface rather than borrowing the terminal's:
+	// a theme that only covered the diff would leave this screen unreadable
+	// on any background it was not designed for.
+	surface := lipgloss.NewStyle().Background(lipgloss.Color(t.Bg)).
+		Foreground(lipgloss.Color(t.Fg))
 	title := fmt.Sprintf(" review queue — %s", m.filter.Label())
 	if m.loading {
 		title += "  ·  loading…"
@@ -168,12 +173,14 @@ func (m QueueModel) View() string {
 	body := m.height - 2
 	switch {
 	case m.err != "" && len(m.items) == 0:
-		b.WriteString("\n  " + lipgloss.NewStyle().Foreground(lipgloss.Color(t.DelFg)).Render(m.err) + "\n")
+		b.WriteString(surface.Render(pad("", m.width)) + "\n")
+		b.WriteString(m.message(t.DelSign, m.err) + "\n")
 	case m.loading && len(m.items) == 0:
-		b.WriteString("\n  loading…\n")
+		b.WriteString(surface.Render(pad("", m.width)) + "\n")
+		b.WriteString(m.message(t.Dim, "loading…") + "\n")
 	case len(m.items) == 0:
-		b.WriteString("\n  " + lipgloss.NewStyle().Foreground(lipgloss.Color(t.MetaFg)).
-			Render("nothing waiting on you — press t for your own pull requests") + "\n")
+		b.WriteString(surface.Render(pad("", m.width)) + "\n")
+		b.WriteString(m.message(t.Dim, "nothing waiting on you — press t for your own pull requests") + "\n")
 	default:
 		if m.cursor >= m.top+body {
 			m.top = m.cursor - body + 1
@@ -184,7 +191,7 @@ func (m QueueModel) View() string {
 		for i := 0; i < body; i++ {
 			idx := m.top + i
 			if idx >= len(m.items) {
-				b.WriteString("\n")
+				b.WriteString(surface.Render(pad("", m.width)) + "\n")
 				continue
 			}
 			b.WriteString(m.row(m.items[idx], idx == m.cursor) + "\n")
@@ -199,14 +206,38 @@ func (m QueueModel) View() string {
 	return b.String()
 }
 
+// message draws one line of surface with a coloured sentence on it.
+func (m QueueModel) message(fg, text string) string {
+	t := m.theme
+	surface := lipgloss.NewStyle().Background(lipgloss.Color(t.Bg)).Foreground(lipgloss.Color(t.Fg))
+	line := surface.Render("  ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color(fg)).Background(lipgloss.Color(t.Bg)).
+			Render(runewidth.Truncate(text, maxInt(1, m.width-2), "…"))
+	return padStyled(surface, line, m.width)
+}
+
 func (m QueueModel) row(it ghsrc.QueueItem, selected bool) string {
 	t := m.theme
-	base := lipgloss.NewStyle()
+
+	// Every piece of the row states its own background: a nested style that
+	// set only a foreground would end the selected row's band where it
+	// started, which is what makes a highlight look broken.
+	bg, textFg, edge, edgeFg := t.Bg, t.Fg, " ", t.Bg
 	if selected {
-		base = base.Background(lipgloss.Color(t.CursorBg)).Bold(true)
+		bg, textFg, edge, edgeFg = t.CursorBg, t.LineNumFocusFg, render.FocusBar, t.CursorBar
+	}
+	st := func(fg string) lipgloss.Style {
+		s := lipgloss.NewStyle().Background(lipgloss.Color(bg))
+		if fg != "" {
+			s = s.Foreground(lipgloss.Color(fg))
+		}
+		if selected {
+			s = s.Bold(true)
+		}
+		return s
 	}
 
-	check, checkFg := checkMark(it.Checks)
+	check, checkFg := m.checkMark(it.Checks)
 	name := fmt.Sprintf("%s#%d", it.Repo, it.Number)
 
 	// The title gets whatever is left, so the identifying columns survive a
@@ -218,31 +249,36 @@ func (m QueueModel) row(it ghsrc.QueueItem, selected bool) string {
 		title = "[draft] " + title
 	}
 
-	line := " " + lipgloss.NewStyle().Foreground(lipgloss.Color(checkFg)).Render(check) + " " +
-		lipgloss.NewStyle().Foreground(lipgloss.Color(t.HunkFg)).Render(name) + "  " +
-		title
+	line := st(edgeFg).Render(edge) + st(checkFg).Render(check) + st("").Render(" ") +
+		st(t.Accent).Render(name) + st("").Render("  ") +
+		st(textFg).Render(title)
 
 	meta := fmt.Sprintf("  %s  %s", it.Author, it.Age())
 	if n := m.drafts[name]; n > 0 {
 		meta = fmt.Sprintf("  %d draft%s%s", n, plural(n), meta)
 	}
-	line += lipgloss.NewStyle().Foreground(lipgloss.Color(t.MetaFg)).Render(meta)
+	line += st(t.Dim).Render(meta)
 
-	return base.Render(pad(line, m.width))
+	if w := lipgloss.Width(line); w < m.width {
+		line += st("").Render(strings.Repeat(" ", m.width-w))
+	}
+	return line
 }
 
-// checkMark renders the CI rollup. An empty state means the pull request has
-// no checks at all, which is different from checks that have not finished.
-func checkMark(state string) (string, string) {
+// checkMark renders the CI rollup, in the theme's own colours. An empty state
+// means the pull request has no checks at all, which is different from checks
+// that have not finished.
+func (m QueueModel) checkMark(state string) (string, string) {
+	t := m.theme
 	switch state {
 	case "SUCCESS":
-		return "✓", "#7fd88f"
+		return "✓", t.ReviewedFg
 	case "FAILURE", "ERROR":
-		return "✗", "#f07178"
+		return "✗", t.DelSign
 	case "PENDING":
-		return "•", "#e5c07b"
+		return "•", t.ChangedFg
 	default:
-		return " ", "#5c6370"
+		return " ", t.Dim
 	}
 }
 

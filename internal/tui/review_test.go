@@ -491,3 +491,44 @@ func TestSelectionWithinOneHunkIsAllowed(t *testing.T) {
 		t.Errorf("note range = %d..%d, want 1..2", n.StartLine, n.Line)
 	}
 }
+
+// A long note is wrapped where it is read, not cut off: the cursor row
+// expands, and every line of it hangs under the author's name.
+func TestFocusedNoteWrapsUnderItsLabel(t *testing.T) {
+	m := seekLine(t, newReviewModel(t), 3)
+	m = press(t, m, "c")
+	m = typeText(t, m, "GitHub rejects the whole review with a bare 422 when both ends of a "+
+		"multi-line comment do not sit in the same hunk, so this wants a guard before it is sent.")
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+
+	for i, row := range m.doc.Rows {
+		if row.Kind == render.RowNote {
+			m.cursor = i
+			break
+		}
+	}
+	lines := m.rend.RenderLines(m.doc.Rows[m.cursor], 60, 0, true, 8)
+	if len(lines) < 2 {
+		t.Fatalf("the focused note rendered %d lines, want it wrapped", len(lines))
+	}
+	if strings.Contains(strings.Join(lines, ""), "…") {
+		t.Error("the note was truncated inside its own expansion")
+	}
+
+	// The first rune is the edge marker; the text starts after the spaces
+	// that follow it.
+	indent := func(s string) int {
+		body := []rune(s)[1:]
+		return strings.IndexFunc(string(body), func(r rune) bool { return r != ' ' })
+	}
+	if indent(lines[1]) <= indent(lines[0]) {
+		t.Errorf("continuation line does not hang under the label: %q then %q", lines[0], lines[1])
+	}
+
+	// Away from the cursor the same note is one line, so a conversation never
+	// buries the code it is about.
+	if compact := m.rend.RenderLines(m.doc.Rows[m.cursor], 60, 0, false, 1); len(compact) != 1 {
+		t.Errorf("unfocused note rendered %d lines, want 1", len(compact))
+	}
+}

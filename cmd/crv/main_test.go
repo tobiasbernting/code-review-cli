@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/tobiasbernting/code-review-cli/internal/config"
+	"github.com/tobiasbernting/code-review-cli/internal/render"
 )
 
 // The help text is where someone finds out configuration exists at all, so it
@@ -108,6 +109,78 @@ func TestReleaseVersionRejectsPseudoVersions(t *testing.T) {
 		got, ok := releaseVersion(tc.in)
 		if got != tc.want || ok != tc.ok {
 			t.Errorf("releaseVersion(%q) = %q,%v; want %q,%v", tc.in, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+// Theme selection is explicit: crv does not sniff the terminal, so a name it
+// does not recognise has to fail loudly rather than pick something.
+func TestPresentationResolvesThemes(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		cfg        config.Config
+		wantTheme  string
+		wantSyntax string
+		wantErr    bool
+	}{
+		{name: "a preset", cfg: config.Config{Theme: "light"}, wantTheme: "light", wantSyntax: "catppuccin-latte"},
+		{name: "capitalised", cfg: config.Config{Theme: "High-Contrast"}, wantTheme: "high-contrast", wantSyntax: "github-dark"},
+		{name: "unset", cfg: config.Config{}, wantTheme: "dark", wantSyntax: "catppuccin-mocha"},
+		// Configurations written before crv had themes set theme to a chroma
+		// style; they must keep working.
+		{name: "a chroma style", cfg: config.Config{Theme: "monokai"}, wantTheme: "dark", wantSyntax: "monokai"},
+		{name: "syntax override", cfg: config.Config{Theme: "light", Syntax: "monokai"}, wantTheme: "light", wantSyntax: "monokai"},
+		{name: "unknown theme", cfg: config.Config{Theme: "darkk"}, wantErr: true},
+		{name: "unknown syntax", cfg: config.Config{Theme: "dark", Syntax: "nope"}, wantErr: true},
+		{name: "unknown density", cfg: config.Config{Theme: "dark", Density: "airy"}, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			th, _, err := presentation(tc.cfg)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("presentation(%+v) = no error", tc.cfg)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if th.Name != tc.wantTheme {
+				t.Errorf("theme = %q, want %q", th.Name, tc.wantTheme)
+			}
+			if th.Syntax != tc.wantSyntax {
+				t.Errorf("syntax = %q, want %q", th.Syntax, tc.wantSyntax)
+			}
+		})
+	}
+}
+
+func TestPresentationResolvesDensity(t *testing.T) {
+	for in, want := range map[string]render.Density{
+		"":            render.DensityComfortable,
+		"comfortable": render.DensityComfortable,
+		"compact":     render.DensityCompact,
+	} {
+		_, layout, err := presentation(config.Config{Theme: "dark", Density: in})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if layout.Density != want {
+			t.Errorf("density %q resolved to %v, want %v", in, layout.Density, want)
+		}
+	}
+}
+
+// The error has to name the way out, since the whole point of explicit themes
+// is that the user picks one.
+func TestUnknownThemeErrorListsTheThemes(t *testing.T) {
+	_, _, err := presentation(config.Config{Theme: "solarised"})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	for _, name := range render.ThemeNames() {
+		if !strings.Contains(err.Error(), name) {
+			t.Errorf("error does not mention %q: %v", name, err)
 		}
 	}
 }

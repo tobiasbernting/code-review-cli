@@ -6,6 +6,8 @@ Review code without leaving the terminal.
 your teammates already said, and submits the whole thing to GitHub as one
 review — without leaving the terminal.
 
+<img src="docs/img/theme-dark.svg" alt="crv reviewing a diff: added and deleted lines marked at the left edge, the cursor row lit, and two review comments wrapped under the line they belong to" width="100%">
+
 ## Install
 
 ```sh
@@ -83,7 +85,9 @@ Reviewing:
 
 | flag | effect |
 | --- | --- |
-| `--theme <name>` | chroma syntax theme (default `catppuccin-mocha`) |
+| `--theme <name>` | colour theme: `dark`, `light`, `high-contrast` (default `dark`) |
+| `--syntax <name>` | chroma style for code, overriding the theme's own |
+| `--density <name>` | `comfortable` or `compact` row density |
 | `--no-color` | disable colour; `NO_COLOR` is honoured too |
 | `--no-untracked` | exclude untracked files |
 | `--width <n>` | output width when stdout is not a terminal |
@@ -93,6 +97,71 @@ Reviewing:
 | `--config` | print the resolved configuration and exit |
 | `--init-config` | write a starter configuration file and exit |
 | `--version` | print version and exit |
+
+## Reading the diff
+
+Every row sits on the same grid, so the eye can lock onto one column and scan
+down it:
+
+```
+▎  12 │  14 + func Greet(name string) string {
+│   │     │  │ │
+│   │     │  │ └─ code, syntax muted so diff state wins
+│   │     │  └─── sign: + added, − deleted, blank unchanged
+│   │     └────── new-side line number
+│   └──────────── the rule separating old from new
+└──────────────── edge: diff marker, or the focus bar on the cursor row
+```
+
+Add and delete are stated three times over — edge marker, sign, row tint — so
+the diff still reads with colour disabled or unperceived, and so that focusing
+a row can lift its tone without erasing what kind of line it is. A `›` at the
+right edge means the line continues past it; `h` and `l` scroll to see it.
+Notes and review comments wrap to the terminal instead, hanging under their
+author's name: one line where they sit, expanded while the cursor is on them,
+so a conversation never buries the code it is about.
+
+Themes are chosen, not detected: `dark`, `light` and `high-contrast` each set a
+background, so crv never has to guess what your terminal is and never guesses
+wrong. Syntax colour is muted toward the surface — least of all on function,
+method and type names — so diff state wins the page while code keeps its shape.
+`--syntax` overrides the chroma style a theme comes with, and a `theme` naming
+a chroma style still means what it used to.
+
+Set the one you want once, in `~/.config/crv/config.toml`:
+
+```toml
+theme = "light"       # dark, light or high-contrast
+```
+
+That is the whole file — every other setting keeps its default. Three lines go
+further:
+
+```toml
+theme = "dark"
+syntax = "monokai"    # keep the theme, change the code colours
+density = "compact"   # no separation between hunks
+```
+
+Try one before committing to it, without touching the file:
+
+```sh
+CRV_THEME=high-contrast crv .     # this review only
+crv --theme light .               # or just this run
+```
+
+<details>
+<summary>The same diff in <code>light</code> and <code>high-contrast</code></summary>
+
+<img src="docs/img/theme-light.svg" alt="the same diff in the light theme" width="100%">
+
+<img src="docs/img/theme-high-contrast.svg" alt="the same diff in the high-contrast theme, on a black background with intra-line changes underlined" width="100%">
+
+</details>
+
+[docs/rendering.md](docs/rendering.md) explains the row anatomy, the theme
+roles, syntax muting and the golden tests — read it before changing how any of
+this looks.
 
 ## Notes and reviews
 
@@ -157,7 +226,9 @@ instead.
 ```toml
 # .crv.toml — checked in, or not, as you prefer
 host = "github.example.com"   # default: whatever gh is configured with
-theme = "catppuccin-mocha"
+theme = "dark"                # dark, light or high-contrast
+syntax = "catppuccin-mocha"   # any chroma style name
+density = "comfortable"       # comfortable or compact
 editor = "hx"
 untracked = true
 color = true
@@ -167,6 +238,10 @@ width = 120
 `host` is empty by default on purpose: gh already knows whether you are on
 github.com or an enterprise host, and a repository-local file is a better place
 to override that than global state you forget you set.
+
+Themes are the setting most worth putting in the user file rather than a
+repository one: which theme reads well is a fact about your terminal, not about
+the code being reviewed.
 
 ## Layout
 
@@ -182,6 +257,9 @@ to override that than global state you forget you set.
 
 `render` has no dependency on the TUI, which is what lets the same rows serve
 the interactive view, the piped output, and the golden-file tests.
+[docs/rendering.md](docs/rendering.md) is the guide to that package: row
+anatomy, theme roles, density, annotation wrapping, and how the screenshots
+above are generated.
 
 ## Tests
 
@@ -191,6 +269,9 @@ platforms, it does not run the suite.
 ```sh
 go test ./...
 go test ./internal/render -update   # rewrite golden files
+
+# regenerate the theme screenshots the README embeds
+go test ./internal/render -run TestWritePreviewSVG -preview docs/img
 ```
 
 ## Releasing

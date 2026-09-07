@@ -1,0 +1,43 @@
+   internal/server/handler.go                                                     +7 −2
+   no longer anchored
+▌             sam [outdated]: This whole helper moved in the meantime.
+  old │ new  func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+   10 │  10       ctx := r.Context()
+   11 │  11       log := s.log.With("path", r.URL.Path)
+   12 │  12
+▎  13 │     −     if err := s.authorize(ctx, r); err != nil {
+┃     │  13 +     if err := s.authorise(ctx, r, s.policy); err != nil {
+▌             robin [resolution unavailable]: Spelling of authorise is inconsistent w…
+▌             you: Check the policy argument is not nil before the call.
+   14 │  14           http.Error(w, "forbidden", http.StatusForbidden)
+   15 │  15           return
+   16 │  16       }
+  old │ new  func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
+   96 │  96       }
+   97 │  97       defer file.Close()
+   98 │  98
+▎     │  99 +     if r.ContentLength > s.maxUploadBytes {
+▎     │ 100 +         http.Error(w, "payload too large", http.StatusRequestEntityTooLar›
+▎     │ 101 +         return
+▎     │ 102 +     }
+▎     │ 103 +
+   99 │ 104       if _, err := io.Copy(dst, file); err != nil {
+▎ 100 │     −         log.Error("copy failed", "err", err, "name", header.Filename, "si›
+▎     │ 105 +         log.Error("upload copy failed", "err", err, "name", header.Filena›
+  101 │ 106           return
+  102 │ 107       }
+
+ ~ internal/server/policy.go                              changed since reviewed  +2 −2
+   renamed from internal/server/rules.go
+   mode 100644 → 100755
+  old │ new                                                                   -1,6 +1,6
+▎   1 │     − package rules
+▎     │   1 + package policy
+    2 │   2
+    3 │   3   import "strings"
+    4 │   4
+▎   5 │     − type Rule struct {
+▎     │   5 + type Policy struct {
+▌             you L4-5: Renaming the type is fine; the package rename needs a depreca…
+    6 │   6       Name string
+

@@ -1,0 +1,45 @@
+diff --git a/internal/server/handler.go b/internal/server/handler.go
+index 1a2b3c4..5d6e7f8 100644
+--- a/internal/server/handler.go
++++ b/internal/server/handler.go
+@@ -10,9 +10,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+ 	ctx := r.Context()
+ 	log := s.log.With("path", r.URL.Path)
+ 
+-	if err := s.authorize(ctx, r); err != nil {
++	if err := s.authorise(ctx, r, s.policy); err != nil {
+ 		http.Error(w, "forbidden", http.StatusForbidden)
+ 		return
+ 	}
+@@ -96,8 +96,12 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
+ 	}
+ 	defer file.Close()
+ 
++	if r.ContentLength > s.maxUploadBytes {
++		http.Error(w, "payload too large", http.StatusRequestEntityTooLarge)
++		return
++	}
++
+ 	if _, err := io.Copy(dst, file); err != nil {
+-		log.Error("copy failed", "err", err, "name", header.Filename, "size", header.Size, "dest", dst.Name())
++		log.Error("upload copy failed", "err", err, "name", header.Filename, "size", header.Size, "dest", dst.Name(), "elapsed", time.Since(start))
+ 		return
+ 	}
+diff --git a/internal/server/policy.go b/internal/server/policy.go
+old mode 100644
+new mode 100755
+similarity index 88%
+rename from internal/server/rules.go
+rename to internal/server/policy.go
+index 9a8b7c6..3f2e1d0
+--- a/internal/server/rules.go
++++ b/internal/server/policy.go
+@@ -1,6 +1,6 @@
+-package rules
++package policy
+ 
+ import "strings"
+ 
+-type Rule struct {
++type Policy struct {
+ 	Name string
