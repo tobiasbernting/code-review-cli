@@ -82,6 +82,35 @@ func TestParseThreadStatesAcrossPages(t *testing.T) {
 	}
 }
 
+// A response GitHub declined to answer must not read as a pull request with no
+// threads: Threads would then mark every discussion unresolved and still claim
+// the resolution state was known. Ported from the GraphQL-paginated thread
+// loader that --paginate replaced.
+func TestParseThreadStatesRejectMalformedResponses(t *testing.T) {
+	for name, out := range map[string]string{
+		"graphql error":    `[{"errors":[{"message":"forbidden"}],"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}}]`,
+		"null data":        `[{"data":null}]`,
+		"null repository":  `[{"data":{"repository":null}}]`,
+		"null pullRequest": `[{"data":{"repository":{"pullRequest":null}}}]`,
+		"not json":         `not json`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := parseThreadStates(out); err == nil {
+				t.Fatalf("accepted %s as an answer", name)
+			}
+		})
+	}
+}
+
+// An empty pull request is not malformed: it has to come back as no states and
+// no error, or every clean PR would lose its resolution state.
+func TestParseThreadStatesAcceptEmptyPullRequest(t *testing.T) {
+	got, err := parseThreadStates(`[{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}}]`)
+	if err != nil || len(got) != 0 {
+		t.Fatalf("got %v, %v; want no states and no error", got, err)
+	}
+}
+
 func TestSnapshotRetriesWhenHeadMoves(t *testing.T) {
 	var prCalls, diffCalls int
 	client := Client{runOverride: func(_ []byte, args ...string) (string, error) {

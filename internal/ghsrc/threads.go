@@ -2,6 +2,7 @@ package ghsrc
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -124,9 +125,9 @@ func (c Client) reviewThreadStates(repo string, number int) ([]threadState, erro
 func parseThreadStates(out string) ([]threadState, error) {
 	var pages []struct {
 		Errors []struct{ Message string } `json:"errors"`
-		Data   struct {
-			Repository struct {
-				PullRequest struct {
+		Data   *struct {
+			Repository *struct {
+				PullRequest *struct {
 					ReviewThreads struct {
 						Nodes []struct {
 							ViewerCanResolve   bool   `json:"viewerCanResolve"`
@@ -157,6 +158,13 @@ func parseThreadStates(out string) ([]threadState, error) {
 	for _, page := range pages {
 		if len(page.Errors) > 0 {
 			return nil, fmt.Errorf("GitHub thread state unavailable: %s", page.Errors[0].Message)
+		}
+		// A null data, repository or pullRequest is GitHub declining to answer,
+		// not a pull request without threads. Silently reading it as "no
+		// threads" would let Threads report every discussion as unresolved
+		// while still claiming the resolution state is known.
+		if page.Data == nil || page.Data.Repository == nil || page.Data.Repository.PullRequest == nil {
+			return nil, errors.New("GitHub returned no review thread data")
 		}
 		for _, node := range page.Data.Repository.PullRequest.ReviewThreads.Nodes {
 			if len(node.Comments.Nodes) == 0 || node.Comments.Nodes[0].DatabaseID == 0 {
