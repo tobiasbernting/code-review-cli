@@ -193,9 +193,10 @@ const (
 	EventRequestChanges = "REQUEST_CHANGES"
 )
 
-// reviewPayload builds the request body for the reviews endpoint.
-func reviewPayload(event, body string, comments []ReviewComment) ([]byte, error) {
-	return json.Marshal(reviewRequest{Body: body, Event: event, Comments: comments})
+// reviewPayload builds the request body for the reviews endpoint. An empty
+// commitID leaves the review unpinned, which is what a plain SubmitReview does.
+func reviewPayload(commitID, event, body string, comments []ReviewComment) ([]byte, error) {
+	return json.Marshal(reviewRequest{CommitID: commitID, Body: body, Event: event, Comments: comments})
 }
 
 type reviewRequest struct {
@@ -244,7 +245,7 @@ func (c Client) submitReview(repo string, number int, headSHA, event, body strin
 			return errors.New("the pull request changed since you opened it — reopen and review the new changes before submitting; your notes are kept")
 		}
 	}
-	payload, err := json.Marshal(reviewRequest{CommitID: headSHA, Body: body, Event: event, Comments: comments})
+	payload, err := reviewPayload(headSHA, event, body, comments)
 	if err != nil {
 		return err
 	}

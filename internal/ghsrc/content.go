@@ -1,8 +1,8 @@
 package ghsrc
 
 import (
+	"bytes"
 	"fmt"
-	"strings"
 )
 
 // BlobText reads pinned file content for a thread whose lines no longer occur
@@ -18,7 +18,7 @@ func (c Client) BlobText(repo, sha string) (string, error) {
 	if len(data) > 1024*1024 {
 		return "", fmt.Errorf("file exceeds the 1 MiB context limit; inspect it in your editor")
 	}
-	if strings.ContainsRune(string(data), 0) {
+	if bytes.IndexByte(data, 0) >= 0 {
 		return "", fmt.Errorf("binary file; textual context is unavailable")
 	}
 	return string(data), nil

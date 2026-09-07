@@ -576,9 +576,6 @@ func WrapText(s string, width int) []string {
 		wrapped := runewidth.Wrap(line, width)
 		out = append(out, strings.Split(wrapped, "\n")...)
 	}
-	if len(out) == 0 {
-		return []string{""}
-	}
 	return out
 }
 

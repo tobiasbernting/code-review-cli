@@ -135,7 +135,7 @@ func TestThreadsFallsBackToRESTWithoutResolution(t *testing.T) {
 }
 
 func TestReviewPayloadShape(t *testing.T) {
-	payload, err := reviewPayload(EventRequestChanges, "needs work", []ReviewComment{
+	payload, err := reviewPayload("", EventRequestChanges, "needs work", []ReviewComment{
 		{Path: "a.go", Line: 12, Body: "nil check", Side: "RIGHT"},
 		{Path: "b.go", Line: 30, StartLine: 24, Body: "extract", Side: "RIGHT", StartSide: "RIGHT"},
 	})
