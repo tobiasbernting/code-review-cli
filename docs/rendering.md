@@ -102,6 +102,12 @@ still read those.
 | headers | `FileBg` `FileFg` `HunkBg` `HunkFg` `MetaFg` | file and hunk bands |
 | annotations | `NoteBg` `NoteFg` `NoteBodyFg` `CommentFg` `StaleFg` | panel, label, body, and who is speaking |
 
+A theme covers every screen, not only the diff: the queue, the file list and
+the help all paint `Bg`/`Fg` themselves instead of leaving gaps to the
+terminal's own colours, and each marks its cursor row with `render.FocusBar` in
+the same column. A view that borrowed the terminal's background could only ever
+look right on the one background it was written against.
+
 Themes are **chosen, not detected**. Each preset states its own background, so
 crv never has to guess what your terminal is — and never guesses wrong. The
 built-ins are `dark`, `light` and `high-contrast`; `render.ThemeByName` reports

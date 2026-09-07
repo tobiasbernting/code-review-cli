@@ -665,8 +665,17 @@ func (m Model) syncStatus() string {
 	}
 }
 
+// surface is the theme's own page. Every view paints it rather than leaving
+// gaps to the terminal's colours, which would only match one theme.
+func (m Model) surface() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color(m.theme.Bg)).
+		Foreground(lipgloss.Color(m.theme.Fg))
+}
+
 func (m Model) filesView() string {
 	var b strings.Builder
+	surface := m.surface()
 	vh := m.viewportHeight()
 	top := 0
 	if m.fileCursor >= vh {
@@ -675,7 +684,7 @@ func (m Model) filesView() string {
 	for i := 0; i < vh; i++ {
 		idx := top + i
 		if idx >= len(m.doc.Files) {
-			b.WriteString("\n")
+			b.WriteString(surface.Render(pad("", m.width)) + "\n")
 			continue
 		}
 		f := m.doc.Files[idx]
@@ -687,14 +696,16 @@ func (m Model) filesView() string {
 		case reviewed:
 			mark = "✓"
 		}
-		line := fmt.Sprintf(" %s %-8s %s  +%d −%d", mark, statusLabel(f), f.Path(), f.Additions, f.Deletions)
+		edge, st := " ", surface
+		if idx == m.fileCursor {
+			edge = render.FocusBar
+			st = lipgloss.NewStyle().
+				Background(lipgloss.Color(m.theme.CursorBg)).
+				Foreground(lipgloss.Color(m.theme.LineNumFocusFg)).Bold(true)
+		}
+		line := fmt.Sprintf("%s%s %-8s %s  +%d −%d", edge, mark, statusLabel(f), f.Path(), f.Additions, f.Deletions)
 		if n := m.notesFor(f.Path()); n > 0 {
 			line += fmt.Sprintf("  %d note%s", n, plural(n))
-		}
-
-		st := lipgloss.NewStyle()
-		if idx == m.fileCursor {
-			st = st.Background(lipgloss.Color(m.theme.CursorBg)).Bold(true)
 		}
 		b.WriteString(st.Render(pad(line, m.width)))
 		b.WriteString("\n")
@@ -750,19 +761,25 @@ func (m Model) helpView() string {
 		{"?", "this help"},
 		{"q", "quit"},
 	}
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.HunkFg)).Bold(true)
-	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.FileFg))
+	bg := lipgloss.Color(m.theme.Bg)
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent)).Background(bg).Bold(true)
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Fg)).Background(bg)
+	surface := m.surface()
+	blank := surface.Render(pad("", m.width))
 
 	var b strings.Builder
-	b.WriteString("\n  " + lipgloss.NewStyle().Bold(true).Render("crv — keys") + "\n\n")
+	b.WriteString(blank + "\n")
+	b.WriteString(surface.Bold(true).Render(pad("  crv — keys", m.width)) + "\n" + blank + "\n")
 	for _, r := range rows {
 		if r[0] == "" {
-			b.WriteString("\n")
+			b.WriteString(blank + "\n")
 			continue
 		}
-		b.WriteString("  " + keyStyle.Render(fmt.Sprintf("%-16s", r[0])) + descStyle.Render(r[1]) + "\n")
+		line := surface.Render("  ") + keyStyle.Render(fmt.Sprintf("%-16s", r[0])) + descStyle.Render(r[1])
+		b.WriteString(padStyled(surface, line, m.width) + "\n")
 	}
-	b.WriteString("\n  " + descStyle.Render("press any of q / esc / ? to return") + "\n")
+	b.WriteString(blank + "\n")
+	b.WriteString(surface.Render(pad("  press any of q / esc / ? to return", m.width)) + "\n")
 	return b.String()
 }
 
@@ -773,6 +790,16 @@ func bar(t render.Theme, width int, left, right string) string {
 		return st.Render(pad(left, width))
 	}
 	return st.Render(left + strings.Repeat(" ", gap) + right + " ")
+}
+
+// padStyled fills a line that already carries styling out to width. The
+// padding gets its own style rather than wrapping the line in one: an outer
+// style would end at the line's first reset and leave the tail bare.
+func padStyled(st lipgloss.Style, s string, width int) string {
+	if w := lipgloss.Width(s); w < width {
+		return s + st.Render(strings.Repeat(" ", width-w))
+	}
+	return s
 }
 
 func pad(s string, width int) string {

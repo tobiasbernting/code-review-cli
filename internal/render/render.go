@@ -53,6 +53,10 @@ const (
 	markerAged   = "~"
 )
 
+// FocusBar is the glyph every view marks its cursor row with — the diff, the
+// file list and the queue — so "where am I?" has one answer everywhere.
+const FocusBar = edgeFocus
+
 type RowKind int
 
 const (
@@ -492,7 +496,9 @@ func (r *Renderer) Render(row Row, width, hoffset int, cursor bool) string {
 	case RowHunk:
 		return r.hunkRow(row, width, cursor)
 	case RowSpacer:
-		return ""
+		// Painted, not empty: a blank line left to the terminal's own colours
+		// would stripe the theme's surface.
+		return r.pad("", width, r.Theme.Bg)
 	}
 	return r.codeRow(row, width, hoffset, cursor)
 }
