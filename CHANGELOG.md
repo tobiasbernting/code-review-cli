@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/tobiasbernting/code-review-cli/compare/v1.1.1...v1.2.0) (2026-09-07)
+
+
+### Features
+
+* reconcile follow-up review workflow ([#14](https://github.com/tobiasbernting/code-review-cli/issues/14)) ([f4e1e2b](https://github.com/tobiasbernting/code-review-cli/commit/f4e1e2b967eff44e92d3c95d1ed664e937490aa3))
+
+
+### Fixes
+
+* close the release-please label handshake the workflow broke ([#15](https://github.com/tobiasbernting/code-review-cli/issues/15)) ([d1b6169](https://github.com/tobiasbernting/code-review-cli/commit/d1b616965d61636363743ea6d88fcd834c972d98))
+
 ## [1.1.1](https://github.com/tobiasbernting/code-review-cli/compare/v1.1.0...v1.1.1) (2026-09-03)
 
 
