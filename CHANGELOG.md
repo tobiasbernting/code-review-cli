@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/tobiasbernting/code-review-cli/compare/v1.2.0...v1.3.0) (2026-09-07)
+
+
+### Features
+
+* **render:** readable rows, named themes, wrapped notes ([#17](https://github.com/tobiasbernting/code-review-cli/issues/17)) ([8ab89c8](https://github.com/tobiasbernting/code-review-cli/commit/8ab89c82cfef739de03765c4d452f4966fd72cfe))
+
 ## [1.2.0](https://github.com/tobiasbernting/code-review-cli/compare/v1.1.1...v1.2.0) (2026-09-07)
 
 
