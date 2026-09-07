@@ -225,6 +225,48 @@ func TestToggleReviewedTracksBlob(t *testing.T) {
 	}
 }
 
+func TestMarkReviewedCollapsesAndAdvances(t *testing.T) {
+	second := strings.Replace(noteDiff, "svc.go", "other.go", -1)
+	m := newReviewModel(t, func(o *Options) {
+		o.Files = diffparse.Parse(noteDiff + "\n" + second)
+	})
+
+	m = press(t, m, "x")
+	if !m.doc.Rows[m.doc.FileRows[0]].Collapsed {
+		t.Fatal("first file was not collapsed")
+	}
+	if m.cursor != m.doc.FileRows[1] {
+		t.Fatalf("cursor = %d, want next file header at %d", m.cursor, m.doc.FileRows[1])
+	}
+
+	m = press(t, m, "shift+tab")
+	if !m.doc.Rows[m.cursor].Collapsed {
+		t.Fatal("first file header was not retained as a collapsed placeholder")
+	}
+	m = press(t, m, "x")
+	if reviewed, _ := m.review.ReviewState("svc.go", "bbbbbbb"); reviewed {
+		t.Fatal("x on collapsed placeholder did not clear reviewed state")
+	}
+	for _, row := range m.doc.Rows {
+		if row.FileIdx == 0 && row.Kind != render.RowFile {
+			return
+		}
+	}
+	t.Fatal("unmarking collapsed file did not restore its body")
+}
+
+func TestFilePickerEntersCollapsedFileHeader(t *testing.T) {
+	m := newReviewModel(t)
+	m = press(t, m, "x")
+	m = press(t, m, "f", "enter")
+	if m.cursor != m.doc.FileRows[0] {
+		t.Fatalf("cursor = %d, want collapsed file header at %d", m.cursor, m.doc.FileRows[0])
+	}
+	if !m.doc.Rows[m.cursor].Collapsed {
+		t.Fatal("file picker did not enter the collapsed file header")
+	}
+}
+
 func TestSubmitRefusedForLocalReview(t *testing.T) {
 	m := seekLine(t, newReviewModel(t), 3)
 	m = press(t, m, "c")

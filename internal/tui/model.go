@@ -392,7 +392,12 @@ func (m Model) handleFilesKey(key string) (tea.Model, tea.Cmd) {
 		}
 	case "enter", " ":
 		if m.fileCursor >= 0 && len(m.doc.FileRows) > m.fileCursor {
-			m.cursor = m.nextSelectable(m.doc.FileRows[m.fileCursor], 1)
+			fileRow := m.doc.FileRows[m.fileCursor]
+			if m.doc.Rows[fileRow].Collapsed {
+				m.cursor = fileRow
+			} else {
+				m.cursor = m.nextSelectable(fileRow, 1)
+			}
 			m.top = m.doc.FileRows[m.fileCursor]
 			m.clampScroll()
 		}

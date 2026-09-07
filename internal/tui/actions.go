@@ -158,8 +158,25 @@ func (m Model) toggleReviewed() (tea.Model, tea.Cmd) {
 		m.status = path + " unmarked"
 	} else {
 		m.status = path + " marked reviewed"
+		m.advanceToNextUnreviewed(row.FileIdx)
 	}
 	return m, nil
+}
+
+// advanceToNextUnreviewed moves to the next file that is not already reviewed
+// at its current blob. It deliberately does not wrap: reaching the end is a
+// useful stopping point for a review queue.
+func (m *Model) advanceToNextUnreviewed(current int) {
+	for i := current + 1; i < len(m.files); i++ {
+		reviewed, changed := m.review.ReviewState(m.files[i].Path(), m.blobs[m.files[i].Path()])
+		if reviewed && !changed {
+			continue
+		}
+		if i < len(m.doc.FileRows) {
+			m.seek(m.doc.FileRows[i])
+		}
+		return
+	}
 }
 
 func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
