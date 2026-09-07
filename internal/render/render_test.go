@@ -166,6 +166,25 @@ func TestBuildIndexesFilesAndHunks(t *testing.T) {
 	}
 }
 
+func TestReviewedUnchangedFileIsCollapsed(t *testing.T) {
+	files := diffparse.Parse("diff --git a/one.go b/one.go\n--- a/one.go\n+++ b/one.go\n@@ -1 +1 @@\n-a\n+b\n\ndiff --git a/two.go b/two.go\n--- a/two.go\n+++ b/two.go\n@@ -1 +1 @@\n-c\n+d\n")
+	doc := Build(files, NewHighlighter("", false), Overlay{
+		FileState: func(path string) (bool, bool) { return path == "one.go", false },
+	}, Layout{})
+
+	if len(doc.FileRows) != 2 {
+		t.Fatalf("got %d file rows, want 2", len(doc.FileRows))
+	}
+	if !doc.Rows[doc.FileRows[0]].Collapsed {
+		t.Fatal("reviewed unchanged file was not marked collapsed")
+	}
+	for _, row := range doc.Rows[doc.FileRows[0]+1:] {
+		if row.FileIdx == 0 {
+			t.Fatal("collapsed file still rendered its body")
+		}
+	}
+}
+
 // Horizontal scrolling must not shift the gutter, only the code column.
 func TestRenderHorizontalScroll(t *testing.T) {
 	files := diffparse.Parse("diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1 +1 @@\n-abcdefghij\n+ABCDEFGHIJ\n")

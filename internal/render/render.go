@@ -125,8 +125,9 @@ type Row struct {
 	Cont bool
 
 	// Reviewed and Changed decorate a file header.
-	Reviewed bool
-	Changed  bool
+	Reviewed  bool
+	Changed   bool
+	Collapsed bool
 }
 
 // Document is the full rendered diff plus the index needed to jump around it.
@@ -154,7 +155,11 @@ func Build(files []*diffparse.FileDiff, h *Highlighter, ov Overlay, layout Layou
 			Kind: RowFile, FileIdx: fi, HunkIdx: -1,
 			Text: f.Path(), Detail: fileStats(f),
 			Reviewed: reviewed, Changed: changed,
+			Collapsed: reviewed && !changed,
 		})
+		if reviewed && !changed {
+			continue
+		}
 
 		for _, m := range metaNotes(f) {
 			d.Rows = append(d.Rows, Row{Kind: RowMeta, FileIdx: fi, HunkIdx: -1, Text: m})
@@ -659,6 +664,8 @@ func (r *Renderer) fileRow(row Row, width int, focus bool) string {
 	detail := row.Detail
 	if row.Reviewed && row.Changed {
 		detail = "changed since reviewed  " + detail
+	} else if row.Collapsed {
+		detail = "viewed"
 	}
 	return r.edge(focus, t.FileBg) +
 		r.band(marker+" ", row.Text, detail, width-1, t.FileFg, t.Dim, t.FileBg, markerFg)
