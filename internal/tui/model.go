@@ -34,6 +34,7 @@ const (
 type Options struct {
 	Files     []*diffparse.FileDiff
 	Theme     render.Theme
+	Layout    render.Layout
 	Config    config.Config
 	Source    Source
 	Review    *notes.Review
@@ -48,6 +49,7 @@ type Model struct {
 	doc    *render.Document
 	rend   *render.Renderer
 	theme  render.Theme
+	layout render.Layout
 	cfg    config.Config
 	src    Source
 	review *notes.Review
@@ -103,6 +105,7 @@ func New(opts Options) Model {
 	m := Model{
 		files:           opts.Files,
 		theme:           opts.Theme,
+		layout:          opts.Layout,
 		cfg:             opts.Config,
 		src:             opts.Source,
 		review:          opts.Review,
@@ -167,7 +170,7 @@ func (m Model) cursorAnchor() documentAnchor {
 }
 
 func (m *Model) rebuildAt(anchor documentAnchor) {
-	m.doc = render.Build(m.files, m.hl, m.overlay())
+	m.doc = render.Build(m.files, m.hl, m.overlay(), m.layout)
 	m.rend = render.NewRenderer(m.theme, m.doc)
 
 	if len(m.doc.Rows) == 0 {

@@ -83,7 +83,9 @@ Reviewing:
 
 | flag | effect |
 | --- | --- |
-| `--theme <name>` | chroma syntax theme (default `catppuccin-mocha`) |
+| `--theme <name>` | colour theme: `dark`, `light`, `high-contrast` (default `dark`) |
+| `--syntax <name>` | chroma style for code, overriding the theme's own |
+| `--density <name>` | `comfortable` or `compact` row density |
 | `--no-color` | disable colour; `NO_COLOR` is honoured too |
 | `--no-untracked` | exclude untracked files |
 | `--width <n>` | output width when stdout is not a terminal |
@@ -93,6 +95,33 @@ Reviewing:
 | `--config` | print the resolved configuration and exit |
 | `--init-config` | write a starter configuration file and exit |
 | `--version` | print version and exit |
+
+## Reading the diff
+
+Every row sits on the same grid, so the eye can lock onto one column and scan
+down it:
+
+```
+▎  12 │  14 + func Greet(name string) string {
+│   │     │  │ │
+│   │     │  │ └─ code, syntax muted so diff state wins
+│   │     │  └─── sign: + added, − deleted, blank unchanged
+│   │     └────── new-side line number
+│   └──────────── the rule separating old from new
+└──────────────── edge: diff marker, or the focus bar on the cursor row
+```
+
+Add and delete are stated three times over — edge marker, sign, row tint — so
+the diff still reads with colour disabled or unperceived, and so that focusing
+a row can lift its tone without erasing what kind of line it is. A `›` at the
+right edge means the line continues past it; `h` and `l` scroll to see it.
+
+Themes are chosen, not detected: `dark`, `light` and `high-contrast` each set a
+background, so crv never has to guess what your terminal is and never guesses
+wrong. Syntax colour is muted toward the surface — least of all on function,
+method and type names — so diff state wins the page while code keeps its shape.
+`--syntax` overrides the chroma style a theme comes with, and a `theme` naming
+a chroma style still means what it used to.
 
 ## Notes and reviews
 
@@ -157,7 +186,9 @@ instead.
 ```toml
 # .crv.toml — checked in, or not, as you prefer
 host = "github.example.com"   # default: whatever gh is configured with
-theme = "catppuccin-mocha"
+theme = "dark"                # dark, light or high-contrast
+syntax = "catppuccin-mocha"   # any chroma style name
+density = "comfortable"       # comfortable or compact
 editor = "hx"
 untracked = true
 color = true

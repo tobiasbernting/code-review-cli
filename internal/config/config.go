@@ -29,8 +29,16 @@ type Config struct {
 	// Empty means "whatever gh is configured to use".
 	Host string `toml:"host"`
 
-	// Theme is a chroma style name.
+	// Theme names a crv colour theme: dark, light or high-contrast. A chroma
+	// style name is also accepted, for configurations written before crv had
+	// themes of its own.
 	Theme string `toml:"theme"`
+
+	// Syntax overrides the chroma style the theme would otherwise pick.
+	Syntax string `toml:"syntax"`
+
+	// Density is "comfortable" or "compact".
+	Density string `toml:"density"`
 
 	// Editor overrides $EDITOR for composing longer notes.
 	Editor string `toml:"editor"`
@@ -50,7 +58,8 @@ type Config struct {
 
 func Defaults() Config {
 	return Config{
-		Theme:     "catppuccin-mocha",
+		Theme:     "dark",
+		Density:   "comfortable",
 		Untracked: true,
 		Width:     120,
 		Color:     true,
@@ -119,6 +128,10 @@ func mergeFile(cfg *Config, path string) error {
 			cfg.Host = file.Host
 		case "theme":
 			cfg.Theme = file.Theme
+		case "syntax":
+			cfg.Syntax = file.Syntax
+		case "density":
+			cfg.Density = file.Density
 		case "editor":
 			cfg.Editor = file.Editor
 		case "untracked":
@@ -144,6 +157,12 @@ func mergeEnv(cfg *Config) error {
 	}
 	if v, ok := os.LookupEnv("CRV_THEME"); ok {
 		cfg.Theme = v
+	}
+	if v, ok := os.LookupEnv("CRV_SYNTAX"); ok {
+		cfg.Syntax = v
+	}
+	if v, ok := os.LookupEnv("CRV_DENSITY"); ok {
+		cfg.Density = v
 	}
 	if v, ok := os.LookupEnv("CRV_EDITOR"); ok {
 		cfg.Editor = v

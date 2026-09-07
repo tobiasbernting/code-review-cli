@@ -25,8 +25,8 @@ func Template() string {
 #
 # Precedence, highest first:
 #   1. command-line flags
-#   2. environment: CRV_HOST, CRV_THEME, CRV_EDITOR, CRV_WIDTH,
-#      CRV_UNTRACKED, CRV_COLOR, NO_COLOR
+#   2. environment: CRV_HOST, CRV_THEME, CRV_SYNTAX, CRV_DENSITY,
+#      CRV_EDITOR, CRV_WIDTH, CRV_UNTRACKED, CRV_COLOR, NO_COLOR
 #   3. %s in the repository being reviewed
 #   4. this file
 #
@@ -37,9 +37,18 @@ func Template() string {
 # on an enterprise host without changing anything globally.
 # host = "github.example.com"
 
-# Syntax highlighting theme: any chroma style name.
-# See https://xyproto.github.io/splash/docs/ for the full list.
+# Colour theme: dark, light or high-contrast. Pick the one that matches your
+# terminal — crv does not guess, because guessing wrong is worse than being
+# told once.
 # theme = "%s"
+
+# Syntax highlighting style: any chroma style name, overriding the one the
+# theme comes with. See https://xyproto.github.io/splash/docs/ for the list.
+# syntax = "catppuccin-mocha"
+
+# Row density: comfortable separates hunks and annotation groups; compact
+# gives every line of the terminal to the diff.
+# density = "%s"
 
 # Editor for composing longer notes with ctrl+e.
 # Unset, crv uses $VISUAL, then $EDITOR, then vi.
@@ -55,7 +64,7 @@ func Template() string {
 
 # Output width used when stdout is not a terminal.
 # width = %d
-`, RepoFile, RepoFile, d.Theme, d.Untracked, d.Color, d.Width)
+`, RepoFile, RepoFile, d.Theme, d.Density, d.Untracked, d.Color, d.Width)
 }
 
 // ErrConfigExists is returned rather than overwriting someone's settings.

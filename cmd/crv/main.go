@@ -103,7 +103,9 @@ usage:
 
 flags:
   --host <name>      GitHub hostname (default: whatever gh is configured with)
-  --theme <name>     chroma syntax theme
+  --theme <name>     colour theme: dark, light, high-contrast
+  --syntax <name>    chroma style for code, overriding the theme's own
+  --density <name>   row density: comfortable or compact
   --no-color         disable colour (also honours NO_COLOR)
   --no-untracked     exclude untracked files from the working-tree diff
   --width <n>        output width when not attached to a terminal
@@ -118,8 +120,8 @@ configuration:
   read from the following, and the first one that mentions a setting wins:
 
     1. the flags above
-    2. environment: CRV_HOST, CRV_THEME, CRV_EDITOR, CRV_WIDTH,
-       CRV_UNTRACKED, CRV_COLOR, NO_COLOR
+    2. environment: CRV_HOST, CRV_THEME, CRV_SYNTAX, CRV_DENSITY,
+       CRV_EDITOR, CRV_WIDTH, CRV_UNTRACKED, CRV_COLOR, NO_COLOR
     3. %s in the repository being reviewed
     4. %s
 
@@ -131,7 +133,9 @@ configuration:
   Both files are TOML and every key is optional:
 
     host = "github.example.com"   # default: whatever gh is configured with
-    theme = "catppuccin-mocha"    # any chroma style name
+    theme = "dark"                # dark, light or high-contrast
+    syntax = "catppuccin-mocha"   # any chroma style name
+    density = "comfortable"       # comfortable or compact
     editor = "hx"                 # default: $VISUAL, then $EDITOR, then vi
     untracked = true              # include untracked files in crv .
     color = true
@@ -160,6 +164,8 @@ func main() {
 type options struct {
 	host        string
 	theme       string
+	syntax      string
+	density     string
 	export      string
 	noColor     bool
 	noUntracked bool
@@ -173,7 +179,9 @@ type options struct {
 func registerFlags(fs *flag.FlagSet) *options {
 	var o options
 	fs.StringVar(&o.host, "host", "", "GitHub hostname")
-	fs.StringVar(&o.theme, "theme", "", "chroma syntax theme")
+	fs.StringVar(&o.theme, "theme", "", "colour theme: dark, light, high-contrast")
+	fs.StringVar(&o.syntax, "syntax", "", "chroma style for code")
+	fs.StringVar(&o.density, "density", "", "row density: comfortable or compact")
 	fs.StringVar(&o.export, "export", "", "print saved notes: markdown")
 	fs.BoolVar(&o.noColor, "no-color", false, "disable colour")
 	fs.BoolVar(&o.noUntracked, "no-untracked", false, "exclude untracked files")
@@ -230,6 +238,10 @@ func run() error {
 			cfg.Host = opts.host
 		case "theme":
 			cfg.Theme = opts.theme
+		case "syntax":
+			cfg.Syntax = opts.syntax
+		case "density":
+			cfg.Density = opts.density
 		case "no-color":
 			cfg.Color = !opts.noColor
 		case "no-untracked":
@@ -305,15 +317,18 @@ func start(repo *gitsrc.Repo, cfg config.Config, src tui.Source, files []*diffpa
 		}
 	}
 
-	th := render.DefaultTheme()
-	th.Syntax = cfg.Theme
+	th, layout, err := presentation(cfg)
+	if err != nil {
+		return err
+	}
 
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
-		return printPlain(files, th, cfg, tui.Overlay(review, threads, files, tui.OverlayOptions{Plain: true}))
+		return printPlain(files, th, layout, cfg, tui.Overlay(review, threads, files, tui.OverlayOptions{Plain: true}))
 	}
 	_, err = tea.NewProgram(tui.New(tui.Options{
 		Files:   files,
 		Theme:   th,
+		Layout:  layout,
 		Config:  cfg,
 		Source:  src,
 		Review:  review,
@@ -335,8 +350,10 @@ func runQueue(repo *gitsrc.Repo, cfg config.Config, limit int) (tui.Selection, e
 		return tui.Selection{}, printQueue(client, limit)
 	}
 
-	th := render.DefaultTheme()
-	th.Syntax = cfg.Theme
+	th, _, err := presentation(cfg)
+	if err != nil {
+		return tui.Selection{}, err
+	}
 
 	model, err := tea.NewProgram(tui.NewQueue(client, th, limit), tea.WithAltScreen()).Run()
 	if err != nil {
@@ -460,6 +477,12 @@ func printConfig(cfg config.Config, repoRoot string) error {
 	userPath, _ := config.UserPath()
 	fmt.Printf("host       %s\n", orDefault(cfg.Host, "(gh's own configuration)"))
 	fmt.Printf("theme      %s\n", cfg.Theme)
+	th, layout, err := presentation(cfg)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("syntax     %s%s\n", th.Syntax, source(cfg.Syntax != "", "the theme's own"))
+	fmt.Printf("density    %s\n", layout.Density)
 	fmt.Printf("editor     %s\n", cfg.EditorCommand())
 	fmt.Printf("untracked  %t\n", cfg.Untracked)
 	fmt.Printf("color      %t\n", cfg.Color)
@@ -475,6 +498,45 @@ func printConfig(cfg config.Config, repoRoot string) error {
 	dir, _ := notes.Dir()
 	fmt.Printf("notes      %s\n", dir)
 	return nil
+}
+
+// presentation resolves the configured names into the theme and layout the
+// renderer works in. A theme name that is not one of crv's own but is a chroma
+// style is taken as a syntax style over the dark theme: that is what the
+// setting meant before crv had themes, and a configuration file that used to
+// work should keep working.
+func presentation(cfg config.Config) (render.Theme, render.Layout, error) {
+	th, ok := render.ThemeByName(cfg.Theme)
+	switch {
+	case ok:
+	case cfg.Theme == "":
+		th = render.DefaultTheme()
+	case render.KnownSyntax(cfg.Theme):
+		th = render.DefaultTheme()
+		th.Syntax = cfg.Theme
+	default:
+		return th, render.Layout{}, fmt.Errorf("unknown theme %q — themes are %s, or any chroma style name",
+			cfg.Theme, strings.Join(render.ThemeNames(), ", "))
+	}
+	if cfg.Syntax != "" {
+		if !render.KnownSyntax(cfg.Syntax) {
+			return th, render.Layout{}, fmt.Errorf("unknown syntax style %q — see https://xyproto.github.io/splash/docs/", cfg.Syntax)
+		}
+		th.Syntax = cfg.Syntax
+	}
+	density, ok := render.ParseDensity(cfg.Density)
+	if !ok {
+		return th, render.Layout{}, fmt.Errorf("unknown density %q — use comfortable or compact", cfg.Density)
+	}
+	return th, render.Layout{Density: density}, nil
+}
+
+// source annotates a resolved value that the user did not set themselves.
+func source(explicit bool, from string) string {
+	if explicit {
+		return ""
+	}
+	return "  (" + from + ")"
 }
 
 // initConfig writes the starter file, or explains why it did not.
@@ -512,12 +574,12 @@ func orDefault(v, fallback string) string {
 
 // printPlain is the non-TTY path: same rows, printed once and exited, so
 // `crv . | less` and `crv . > review.txt` work.
-func printPlain(files []*diffparse.FileDiff, th render.Theme, cfg config.Config, ov render.Overlay) error {
+func printPlain(files []*diffparse.FileDiff, th render.Theme, layout render.Layout, cfg config.Config, ov render.Overlay) error {
 	width := cfg.Width
 	if width <= 0 {
 		width = 120
 	}
-	doc := render.Build(files, render.NewHighlighter(th.Syntax, cfg.Color), ov)
+	doc := render.Build(files, render.NewHighlighter(th.Syntax, cfg.Color), ov, layout)
 	r := render.NewRenderer(th, doc)
 
 	var b strings.Builder
