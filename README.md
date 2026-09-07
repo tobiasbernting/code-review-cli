@@ -118,7 +118,8 @@ the diff still reads with colour disabled or unperceived, and so that focusing
 a row can lift its tone without erasing what kind of line it is. A `›` at the
 right edge means the line continues past it; `h` and `l` scroll to see it.
 Notes and review comments wrap to the terminal instead, hanging under their
-author's name, and rewrap when the window is resized.
+author's name: one line where they sit, expanded while the cursor is on them,
+so a conversation never buries the code it is about.
 
 Themes are chosen, not detected: `dark`, `light` and `high-contrast` each set a
 background, so crv never has to guess what your terminal is and never guesses
@@ -126,6 +127,28 @@ wrong. Syntax colour is muted toward the surface — least of all on function,
 method and type names — so diff state wins the page while code keeps its shape.
 `--syntax` overrides the chroma style a theme comes with, and a `theme` naming
 a chroma style still means what it used to.
+
+Set the one you want once, in `~/.config/crv/config.toml`:
+
+```toml
+theme = "light"       # dark, light or high-contrast
+```
+
+That is the whole file — every other setting keeps its default. Three lines go
+further:
+
+```toml
+theme = "dark"
+syntax = "monokai"    # keep the theme, change the code colours
+density = "compact"   # no separation between hunks
+```
+
+Try one before committing to it, without touching the file:
+
+```sh
+CRV_THEME=high-contrast crv .     # this review only
+crv --theme light .               # or just this run
+```
 
 <details>
 <summary>The same diff in <code>light</code> and <code>high-contrast</code></summary>
@@ -215,6 +238,10 @@ width = 120
 `host` is empty by default on purpose: gh already knows whether you are on
 github.com or an enterprise host, and a repository-local file is a better place
 to override that than global state you forget you set.
+
+Themes are the setting most worth putting in the user file rather than a
+repository one: which theme reads well is a fact about your terminal, not about
+the code being reviewed.
 
 ## Layout
 
