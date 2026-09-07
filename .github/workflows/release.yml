@@ -12,6 +12,14 @@ name: release
 # The tag is pushed with RELEASE_PLEASE_TOKEN rather than GITHUB_TOKEN,
 # because GitHub does not trigger workflows for anything the built-in token
 # pushes — the goreleaser job would never run.
+#
+# Handing the release to GoReleaser costs us release-please's bookkeeping:
+# release-please marks a release pull request "autorelease: pending" when it
+# opens it and "autorelease: tagged" when it publishes the release. With
+# skip-github-release it never publishes, so the label never moves, and every
+# later run aborts with "There are untagged, merged release PRs outstanding"
+# — no release pull request, no version bump, no tag, no release. So this
+# workflow closes that handshake itself, below.
 on:
   push:
     branches: [main]
@@ -43,6 +51,11 @@ jobs:
     needs: release-please
     if: "!startsWith(github.ref, 'refs/tags/')"
     runs-on: ubuntu-latest
+    # Labelling a pull request goes through the issues API.
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -70,6 +83,33 @@ jobs:
           git tag -a "$tag" -m "$tag"
           git push origin "$tag"
           echo "tagged $tag"
+
+      # Runs whether or not the step above created the tag, because the stuck
+      # state is exactly "the tag exists but the label was never moved".
+      - name: close release-please's tagged handshake
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(jq -r '."."' .release-please-manifest.json)"
+          tag="v$version"
+          if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag does not exist yet — leaving the labels alone"
+            exit 0
+          fi
+
+          # A merged release pull request still marked pending is one this
+          # workflow tagged and release-please never got to relabel.
+          prs="$(gh pr list --state merged --label "autorelease: pending" --json number --jq '.[].number')"
+          if [ -z "$prs" ]; then
+            echo "no merged release pull requests waiting to be marked tagged"
+            exit 0
+          fi
+          for pr in $prs; do
+            gh pr edit "$pr" \
+              --remove-label "autorelease: pending" \
+              --add-label "autorelease: tagged"
+            echo "marked #$pr tagged"
+          done
 
   goreleaser:
     if: startsWith(github.ref, 'refs/tags/')
