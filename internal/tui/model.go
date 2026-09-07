@@ -605,8 +605,8 @@ func (m Model) hintKeys() []string {
 		}
 	case modeThread:
 		return []string{
-			"x verify  c reply  R resolve  n/p thread  a changes  esc back  ? help",
-			"x verify  c reply  R resolve  n/p thread  esc back  ? help",
+			"x verify  c reply  R resolve/reopen  n/p thread  esc back  ? help",
+			"x verify  c reply  R resolve/reopen  esc back  ? help",
 			"x verify  c reply  esc back  ? help",
 			"esc back  ? help",
 		}
