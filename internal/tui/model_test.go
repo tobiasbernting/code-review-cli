@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -147,5 +148,24 @@ func TestCursorNeverRestsOnSpacer(t *testing.T) {
 			t.Fatalf("cursor landed on a spacer at row %d", m.cursor)
 		}
 		m = press(t, m, "j")
+	}
+}
+
+// The note and reviewed keys are the two a reviewer reaches for most, so they
+// stay in the status bar on a pull request even though PR navigation adds
+// hints, and narrow terminals drop the least useful ones first.
+func TestStatusBarKeepsCoreHints(t *testing.T) {
+	m := newTestModel(t)
+	m.src = Source{Kind: SourcePR, Repo: "o/r", Title: "test"}
+
+	for _, width := range []int{200, 120, 100, 80, 60, 40} {
+		m.width = width
+		bar := m.statusBar()
+		if width >= 80 && !strings.Contains(bar, "c note") {
+			t.Errorf("width %d: status bar lost the note hint: %q", width, bar)
+		}
+		if !strings.Contains(bar, "? help") {
+			t.Errorf("width %d: status bar lost the help hint: %q", width, bar)
+		}
 	}
 }

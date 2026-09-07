@@ -544,7 +544,11 @@ func (m Model) statusBar() string {
 		if m.changesView {
 			left = " no changes since your latest review" + m.syncStatus()
 		}
-		return bar(m.theme, m.width, left, "r sync  ? help  q quit")
+		return bar(m.theme, m.width, left, fitHint(m.width, left, []string{
+			"r sync  ? help  q quit",
+			"r sync  ? help",
+			"? help",
+		}))
 	}
 	row := m.doc.Rows[m.cursor]
 	name := ""
@@ -573,14 +577,33 @@ func (m Model) statusBar() string {
 	}
 	left += m.syncStatus()
 
-	right := "c note  x reviewed  ? help  q quit"
+	hints := []string{
+		"c note  x reviewed  ? help  q quit",
+		"c note  x reviewed  ? help",
+		"c note  ? help",
+		"? help",
+	}
 	if m.src.CanSubmit() {
-		right = "t threads  a changes  D PR diff  r sync  S submit  ? help"
+		hints = []string{
+			"c note  x reviewed  t threads  a changes  D PR diff  r sync  S submit  ? help  q quit",
+			"c note  x reviewed  t threads  r sync  S submit  ? help  q quit",
+			"c note  x reviewed  S submit  ? help",
+			"c note  S submit  ? help",
+			"c note  ? help",
+			"? help",
+		}
 	}
-	if m.width < 70 {
-		right = "? help  q quit"
+	return bar(m.theme, m.width, left, fitHint(m.width, left, hints))
+}
+
+// fitHint picks the most detailed key hints that still leave a gap beside left.
+func fitHint(width int, left string, hints []string) string {
+	for _, h := range hints {
+		if width-lipgloss.Width(left)-lipgloss.Width(h)-1 >= 2 {
+			return h
+		}
 	}
-	return bar(m.theme, m.width, left, right)
+	return ""
 }
 
 func (m Model) syncStatus() string {
