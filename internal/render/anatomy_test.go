@@ -315,7 +315,54 @@ func TestSplitLabel(t *testing.T) {
 	}
 }
 
-// indent is the column an annotation's text starts at, past its marker.
+// indent is the column an annotation's text starts at, past its edge marker.
 func indent(line string) int {
-	return strings.IndexFunc(line, func(r rune) bool { return r != ' ' && r != []rune(edgeNote)[0] })
+	body := string([]rune(line)[1:])
+	return 1 + strings.IndexFunc(body, func(r rune) bool { return r != ' ' })
+}
+
+// The cursor can rest on a header — n and tab land on them — so a header has
+// to show focus too, in the same column as everything else. A cursor that
+// vanishes when it leaves the code is a cursor you have to hunt for.
+func TestEveryRowTheCursorCanRestOnShowsFocus(t *testing.T) {
+	ov := Overlay{
+		At: func(path string, line int) []Annotation {
+			if line == 2 {
+				return []Annotation{{Author: "robin", Body: "here", ResolutionKnown: true, Line: 2}}
+			}
+			return nil
+		},
+		Detached: func(path string) []AnnotationGroup {
+			return []AnnotationGroup{{
+				Title: "no longer anchored",
+				Items: []Annotation{{Author: "sam", Body: "moved", ResolutionKnown: true}},
+			}}
+		},
+	}
+	// A renamed file, so meta rows are in the document too.
+	renamed := sampleDiff + "diff --git a/old.go b/new.go\nrename from old.go\nrename to new.go\n" +
+		"--- a/old.go\n+++ b/new.go\n@@ -1 +1 @@\n-a\n+b\n"
+	doc := Build(diffparse.Parse(renamed), NewHighlighter("", false), ov, Layout{})
+	r := NewRenderer(DefaultTheme(), doc)
+
+	seen := map[RowKind]bool{}
+	for _, row := range doc.Rows {
+		if row.Kind == RowSpacer {
+			continue
+		}
+		seen[row.Kind] = true
+		focused := r.Render(row, 60, 0, true)
+		if focused == r.Render(row, 60, 0, false) {
+			t.Errorf("row kind %d looks the same focused as unfocused: %q", row.Kind, focused)
+			continue
+		}
+		if !strings.HasPrefix(focused, edgeFocus) && !strings.HasPrefix(focused, edgeNote) {
+			t.Errorf("row kind %d does not mark focus in the edge column: %q", row.Kind, focused)
+		}
+	}
+	for _, kind := range []RowKind{RowFile, RowMeta, RowHunk, RowCode, RowNote, RowSection} {
+		if !seen[kind] {
+			t.Errorf("row kind %d never appeared, so focus on it is untested", kind)
+		}
+	}
 }

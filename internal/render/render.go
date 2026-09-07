@@ -482,15 +482,15 @@ func (r *Renderer) Render(row Row, width, hoffset int, cursor bool) string {
 	}
 	switch row.Kind {
 	case RowFile:
-		return r.fileRow(row, width)
+		return r.fileRow(row, width, cursor)
 	case RowNote:
 		return r.noteRow(row, width, cursor)
 	case RowSection:
-		return r.sectionRow(row, width)
+		return r.sectionRow(row, width, cursor)
 	case RowMeta:
-		return r.metaRow(row, width)
+		return r.metaRow(row, width, cursor)
 	case RowHunk:
-		return r.hunkRow(row, width)
+		return r.hunkRow(row, width, cursor)
 	case RowSpacer:
 		return ""
 	}
@@ -626,10 +626,21 @@ func inSpans(spans []span, off int) bool {
 	return false
 }
 
+// edge draws the leftmost column of a row that is not code. The cursor can
+// rest on a header — n and tab land on them — so a header has to be able to
+// show that it is the focused row, or the cursor disappears whenever it is not
+// on code.
+func (r *Renderer) edge(focus bool, bg string) string {
+	if focus {
+		return r.style(r.Theme.CursorBar, bg).Render(edgeFocus)
+	}
+	return r.style("", bg).Render(" ")
+}
+
 // fileRow draws the header as a full-width band, prefixed with a review
 // marker. A file that changed after being marked keeps its tick and gains a
 // tilde: silently unticking would hide that you had already read it.
-func (r *Renderer) fileRow(row Row, width int) string {
+func (r *Renderer) fileRow(row Row, width int, focus bool) string {
 	t := r.Theme
 	marker, markerFg := " ", t.FileFg
 	switch {
@@ -643,16 +654,18 @@ func (r *Renderer) fileRow(row Row, width int) string {
 	if row.Reviewed && row.Changed {
 		detail = "changed since reviewed  " + detail
 	}
-	return r.band(" "+marker+" ", row.Text, detail, width, t.FileFg, t.Dim, t.FileBg, markerFg)
+	return r.edge(focus, t.FileBg) +
+		r.band(marker+" ", row.Text, detail, width-1, t.FileFg, t.Dim, t.FileBg, markerFg)
 }
 
 // hunkRow labels the gutter columns it sits above, so the two number columns
 // are named where a reader first meets them, and carries the section the hunk
 // falls in. The @@ range trails on the right, quietly.
-func (r *Renderer) hunkRow(row Row, width int) string {
+func (r *Renderer) hunkRow(row Row, width int, focus bool) string {
 	t := r.Theme
 	var b strings.Builder
-	b.WriteString(r.style(t.GutterSep, t.HunkBg).Render("  "))
+	b.WriteString(r.edge(focus, t.HunkBg))
+	b.WriteString(r.style(t.GutterSep, t.HunkBg).Render(" "))
 	b.WriteString(r.style(t.Dim, t.HunkBg).Render(label("old", r.Doc.gutterOld)))
 	b.WriteString(r.style(t.GutterSep, t.HunkBg).Render(" " + gutterRule + " "))
 	b.WriteString(r.style(t.Dim, t.HunkBg).Render(label("new", r.Doc.gutterNew)))
@@ -678,13 +691,13 @@ func (r *Renderer) hunkRow(row Row, width int) string {
 	return r.pad(b.String(), width, t.HunkBg)
 }
 
-func (r *Renderer) metaRow(row Row, width int) string {
+func (r *Renderer) metaRow(row Row, width int, focus bool) string {
 	t := r.Theme
 	// Meta rows belong to the file header above them, so they indent to its
 	// title rather than to the code column.
-	indent := strings.Repeat(" ", mini(3, width))
-	line := r.style("", t.Bg).Render(indent) +
-		r.style(t.MetaFg, t.Bg).Render(clip(row.Text, width-len(indent)))
+	indent := strings.Repeat(" ", mini(2, maxi(width-1, 0)))
+	line := r.edge(focus, t.Bg) + r.style("", t.Bg).Render(indent) +
+		r.style(t.MetaFg, t.Bg).Render(clip(row.Text, width-1-len(indent)))
 	return r.pad(line, width, t.Bg)
 }
 
@@ -721,9 +734,11 @@ func (r *Renderer) RenderLines(row Row, width, hoffset int, cursor bool, maxLine
 		fg = t.CommentFg
 	}
 
-	bg, edgeFg := t.NoteBg, fg
+	bg, edgeFg, edge := t.NoteBg, fg, edgeNote
 	if cursor {
-		bg, edgeFg = t.CursorBg, t.CursorBar
+		// The focus bar, like every other focused row: the label already says
+		// this is a note, so the marker is free to say where the cursor is.
+		bg, edgeFg, edge = t.CursorBg, t.CursorBar, edgeFocus
 	}
 
 	indent := r.Doc.GutterWidth()
@@ -752,7 +767,7 @@ func (r *Renderer) RenderLines(row Row, width, hoffset int, cursor bool, maxLine
 	lines := make([]string, 0, len(wrapped))
 	for i, line := range wrapped {
 		var b strings.Builder
-		b.WriteString(r.style(edgeFg, bg).Render(edgeNote))
+		b.WriteString(r.style(edgeFg, bg).Render(edge))
 		pad := indent - 1
 		if i > 0 {
 			pad += noteHang
@@ -876,11 +891,11 @@ func WrapText(s string, width int) []string {
 
 // sectionRow heads a group of annotations that no longer belong to a line —
 // or to any file in this diff. It is a heading, so it is drawn like one.
-func (r *Renderer) sectionRow(row Row, width int) string {
+func (r *Renderer) sectionRow(row Row, width int, focus bool) string {
 	t := r.Theme
-	indent := strings.Repeat(" ", mini(3, width))
-	line := r.style("", t.Bg).Render(indent) +
-		r.bold(t.Dim, t.Bg).Render(clip(row.Text, width-len(indent)))
+	indent := strings.Repeat(" ", mini(2, maxi(width-1, 0)))
+	line := r.edge(focus, t.Bg) + r.style("", t.Bg).Render(indent) +
+		r.bold(t.Dim, t.Bg).Render(clip(row.Text, width-1-len(indent)))
 	return r.pad(line, width, t.Bg)
 }
 

@@ -516,8 +516,11 @@ func TestFocusedNoteWrapsUnderItsLabel(t *testing.T) {
 		t.Error("the note was truncated inside its own expansion")
 	}
 
+	// The first rune is the edge marker; the text starts after the spaces
+	// that follow it.
 	indent := func(s string) int {
-		return strings.IndexFunc(s, func(r rune) bool { return r != ' ' && r != '▌' })
+		body := []rune(s)[1:]
+		return strings.IndexFunc(string(body), func(r rune) bool { return r != ' ' })
 	}
 	if indent(lines[1]) <= indent(lines[0]) {
 		t.Errorf("continuation line does not hang under the label: %q then %q", lines[0], lines[1])
