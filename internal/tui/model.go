@@ -577,23 +577,57 @@ func (m Model) statusBar() string {
 	}
 	left += m.syncStatus()
 
-	hints := []string{
+	return bar(m.theme, m.width, left, fitHint(m.width, left, m.hintKeys()))
+}
+
+// hintKeys is every screen's key hints in one place, most detailed first so
+// fitHint can drop the least useful ones on a narrow terminal. The order is
+// fixed per screen rather than per state, so the bar does not reshuffle as the
+// review progresses, and every screen below the diff ends with the way back,
+// so no view is a dead end.
+func (m Model) hintKeys() []string {
+	switch m.mode {
+	case modeThreads:
+		return []string{
+			"enter open  x verify  a changes  D PR diff  r sync  esc back  ? help",
+			"enter open  x verify  a changes  esc back  ? help",
+			"enter open  x verify  esc back  ? help",
+			"esc back  ? help",
+		}
+	case modeThread:
+		return []string{
+			"x verify  c reply  R resolve  n/p thread  a changes  esc back  ? help",
+			"x verify  c reply  R resolve  n/p thread  esc back  ? help",
+			"x verify  c reply  esc back  ? help",
+			"esc back  ? help",
+		}
+	case modeFiles:
+		return []string{
+			"enter open  x reviewed  esc back  ? help",
+			"enter open  x reviewed  esc back",
+			"esc back",
+		}
+	case modeComment:
+		return []string{
+			"j/k scroll  esc back",
+			"esc back",
+		}
+	}
+	if m.src.CanSubmit() {
+		return []string{
+			"c note  x reviewed  t threads  a changes  D PR diff  r sync  S submit  ? help  q quit",
+			"c note  x reviewed  t threads  r sync  S submit  ? help  q quit",
+			"c note  x reviewed  S submit  ? help",
+			"c note  S submit  ? help",
+			"? help",
+		}
+	}
+	return []string{
 		"c note  x reviewed  ? help  q quit",
 		"c note  x reviewed  ? help",
 		"c note  ? help",
 		"? help",
 	}
-	if m.src.CanSubmit() {
-		hints = []string{
-			"c note  x reviewed  t threads  a changes  D PR diff  r sync  S submit  ? help  q quit",
-			"c note  x reviewed  t threads  r sync  S submit  ? help  q quit",
-			"c note  x reviewed  S submit  ? help",
-			"c note  S submit  ? help",
-			"c note  ? help",
-			"? help",
-		}
-	}
-	return bar(m.theme, m.width, left, fitHint(m.width, left, hints))
 }
 
 // fitHint picks the most detailed key hints that still leave a gap beside left.
@@ -653,8 +687,8 @@ func (m Model) filesView() string {
 		b.WriteString(st.Render(pad(line, m.width)))
 		b.WriteString("\n")
 	}
-	b.WriteString(bar(m.theme, m.width,
-		fmt.Sprintf(" %d files", len(m.doc.Files)), "enter open  x reviewed  esc back"))
+	left := fmt.Sprintf(" %d files", len(m.doc.Files))
+	b.WriteString(bar(m.theme, m.width, left, fitHint(m.width, left, m.hintKeys())))
 	return b.String()
 }
 
@@ -700,6 +734,7 @@ func (m Model) helpView() string {
 		{"ctrl+e", "compose in $EDITOR while writing a note"},
 		{"S", "submit the review to GitHub"},
 		{"", ""},
+		{"esc", "back to the diff from threads, files or a comment"},
 		{"?", "this help"},
 		{"q", "quit"},
 	}

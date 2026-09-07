@@ -169,3 +169,39 @@ func TestStatusBarKeepsCoreHints(t *testing.T) {
 		}
 	}
 }
+
+// No screen below the diff may be a dead end: whatever the terminal width, the
+// hints have to keep saying how to get back.
+func TestHintsAlwaysOfferAWayBack(t *testing.T) {
+	m := newTestModel(t)
+	m.src = Source{Kind: SourcePR, Repo: "o/r", Title: "test"}
+
+	for _, mode := range []mode{modeThreads, modeThread, modeFiles, modeComment} {
+		m.mode = mode
+		for _, width := range []int{200, 100, 60, 30} {
+			m.width = width
+			hints := m.hintKeys()
+			for _, h := range hints {
+				if !strings.Contains(h, "esc back") {
+					t.Errorf("mode %d: hint variant omits the way back: %q", mode, h)
+				}
+			}
+			if got := fitHint(width, " left", hints); got == "" {
+				t.Errorf("mode %d width %d: no hint variant fits", mode, width)
+			}
+		}
+	}
+}
+
+// esc used to reassign the mode the thread list was already in, stranding the
+// reviewer with no way back to the diff.
+func TestEscLeavesTheThreadList(t *testing.T) {
+	m := newTestModel(t)
+	m.src = Source{Kind: SourcePR, Repo: "o/r", Title: "test"}
+	m.mode = modeThreads
+
+	m = press(t, m, "esc")
+	if m.mode != modeDiff {
+		t.Fatalf("esc in the thread list left mode %d, want the diff", m.mode)
+	}
+}

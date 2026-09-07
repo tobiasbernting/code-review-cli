@@ -83,7 +83,11 @@ func (m Model) handleThreadKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.helpReturn = m.mode
 		m.mode = modeHelp
 	case "esc", "t":
-		m.mode = modeThreads
+		if m.mode == modeThreads {
+			m.mode = modeDiff
+		} else {
+			m.mode = modeThreads
+		}
 		m.follow.top = 0
 	case "r":
 		return m.startSync(nil)
@@ -423,10 +427,7 @@ func (m Model) followupView() string {
 	} else if m.status != "" {
 		left = " " + m.status
 	}
-	right := "enter open  x verify  a changes  D PR diff  ? help"
-	if m.mode == modeThread {
-		right = "x verify  c reply  R resolve/reopen  n/p thread  ? help"
-	}
+	right := fitHint(m.width, left, m.hintKeys())
 	if m.mode == modeReply {
 		right = "enter sends to GitHub  esc cancels"
 	}

@@ -114,9 +114,8 @@ func (m Model) commentView() string {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString(bar(m.theme, m.width,
-		fmt.Sprintf(" %d/%d", min(m.detail.offset+1, max(1, len(lines))), max(1, len(lines))),
-		"j/k scroll  enter close"))
+	left := fmt.Sprintf(" %d/%d", min(m.detail.offset+1, max(1, len(lines))), max(1, len(lines)))
+	b.WriteString(bar(m.theme, m.width, left, fitHint(m.width, left, m.hintKeys())))
 	return b.String()
 }
 
