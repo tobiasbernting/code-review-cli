@@ -11,11 +11,13 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
 	"github.com/tobiasbernting/code-review-cli/internal/config"
 	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
+	"github.com/tobiasbernting/code-review-cli/internal/followup"
 	"github.com/tobiasbernting/code-review-cli/internal/ghsrc"
 	"github.com/tobiasbernting/code-review-cli/internal/gitsrc"
 	"github.com/tobiasbernting/code-review-cli/internal/notes"
@@ -279,18 +281,27 @@ func start(repo *gitsrc.Repo, cfg config.Config, src tui.Source, files []*diffpa
 	if export != "" {
 		return printExport(export, review)
 	}
-	if len(files) == 0 {
+	if len(files) == 0 && src.Kind != tui.SourcePR {
 		fmt.Println("no changes")
 		return nil
 	}
 
-	var comments []ghsrc.Comment
-	if src.Kind == tui.SourcePR {
+	var threads []ghsrc.Thread
+	var syncedAt time.Time
+	var syncError string
+	if src.FollowUp != nil {
+		threads = src.FollowUp.Threads
+		syncedAt = time.Now()
+	} else if src.Kind == tui.SourcePR {
 		// A failure here must not block the review: the diff is the point,
-		// and teammates' comments are additional context.
-		comments, err = src.Client.Comments(src.Repo, src.PRNumber)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "crv: could not load existing comments: "+err.Error())
+		// and existing discussions are additional context.
+		feed, threadErr := src.Client.Threads(src.Repo, src.PRNumber)
+		if threadErr != nil {
+			syncError = "comments unavailable; press r to retry: " + threadErr.Error()
+			fmt.Fprintln(os.Stderr, "crv: "+syncError)
+		} else {
+			threads = feed.Threads
+			syncedAt = time.Now()
 		}
 	}
 
@@ -298,15 +309,15 @@ func start(repo *gitsrc.Repo, cfg config.Config, src tui.Source, files []*diffpa
 	th.Syntax = cfg.Theme
 
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
-		return printPlain(files, th, cfg, tui.Overlay(review, comments, tui.Blobs(files)))
+		return printPlain(files, th, cfg, tui.Overlay(review, threads, files, tui.OverlayOptions{Plain: true}))
 	}
 	_, err = tea.NewProgram(tui.New(tui.Options{
-		Files:    files,
-		Theme:    th,
-		Config:   cfg,
-		Source:   src,
-		Review:   review,
-		Comments: comments,
+		Files:   files,
+		Theme:   th,
+		Config:  cfg,
+		Source:  src,
+		Review:  review,
+		Threads: threads, SyncedAt: syncedAt, SyncError: syncError,
 	}), tea.WithAltScreen()).Run()
 	return err
 }
@@ -372,26 +383,9 @@ func printQueue(client ghsrc.Client, limit int) error {
 func reviewPR(repo *gitsrc.Repo, cfg config.Config, name string, number int) error {
 	client := ghsrc.Client{Host: cfg.Host, Dir: repo.Root, Repo: name}
 
-	pr, err := client.PR(number)
+	src, files, err := loadPR(client, name, number)
 	if err != nil {
 		return err
-	}
-	raw, err := client.Diff(number)
-	if err != nil {
-		return err
-	}
-	files := diffparse.Parse(raw)
-	diffparse.FillStats(files)
-
-	viewer, _ := client.Viewer()
-	src := tui.Source{
-		Kind:     tui.SourcePR,
-		Title:    fmt.Sprintf("%s#%d %s", name, pr.Number, pr.Title),
-		Repo:     name,
-		PRNumber: pr.Number,
-		Client:   client,
-		Author:   pr.Author.Login,
-		Viewer:   viewer,
 	}
 	return start(repo, cfg, src, files, "")
 }
@@ -428,37 +422,25 @@ func resolvePR(repo *gitsrc.Repo, cfg config.Config, number int) (tui.Source, []
 	if err != nil {
 		return tui.Source{}, nil, err
 	}
-	pr, err := client.PR(number)
+	return loadPR(client, name, number)
+}
+
+func loadPR(client ghsrc.Client, name string, number int) (tui.Source, []*diffparse.FileDiff, error) {
+	client.Repo = name
+	snapshot, err := client.ReviewSnapshot(name, number)
 	if err != nil {
 		return tui.Source{}, nil, err
 	}
-	raw, err := client.Diff(number)
-	if err != nil {
-		return tui.Source{}, nil, err
-	}
-
-	files := diffparse.Parse(raw)
-	// gh pr diff has no --numstat companion, so the counts come from the
-	// hunks instead.
-	diffparse.FillStats(files)
-
-	// Knowing who you are lets the submit screen rule out approving your own
-	// pull request, which GitHub rejects with a bare 422.
-	viewer, err := client.Viewer()
-	if err != nil {
-		viewer = ""
-	}
-
+	session := followup.FromSnapshot(snapshot)
+	pr := session.PR
 	src := tui.Source{
-		Kind:     tui.SourcePR,
-		Title:    fmt.Sprintf("%s#%d %s", name, pr.Number, pr.Title),
-		Repo:     name,
-		PRNumber: pr.Number,
-		Client:   client,
-		Author:   pr.Author.Login,
-		Viewer:   viewer,
+		Kind:  tui.SourcePR,
+		Title: fmt.Sprintf("%s#%d %s", name, pr.Number, pr.Title),
+		Repo:  name, PRNumber: pr.Number, Client: client,
+		Author: pr.Author.Login, Viewer: session.Viewer,
+		HeadSHA: pr.HeadSHA, FollowUp: session,
 	}
-	return src, files, nil
+	return src, session.Files, nil
 }
 
 func printExport(format string, review *notes.Review) error {
@@ -540,8 +522,10 @@ func printPlain(files []*diffparse.FileDiff, th render.Theme, cfg config.Config,
 
 	var b strings.Builder
 	for _, row := range doc.Rows {
-		b.WriteString(r.Render(row, width, 0, false))
-		b.WriteString("\n")
+		for _, line := range r.RenderLines(row, width, 0, false, 0) {
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
 	}
 	_, err := os.Stdout.WriteString(b.String())
 	return err

@@ -61,6 +61,9 @@ hides them.
 | `g` / `G` | top / bottom |
 | `h` / `l` | scroll horizontally, `0` to reset |
 | `f` | file list |
+| `r` | sync the current pull request |
+| `N` / `P` | next / previous thread with new activity |
+| `enter` | expand a thread or open a comment |
 | `?` | help |
 | `q` | quit |
 
@@ -71,6 +74,7 @@ Reviewing:
 | `c` | comment on this line |
 | `v` | start a multi-line selection, then move and press `c` |
 | `e` / `d` | edit / delete the note under the cursor |
+| `m` | move a detached draft to a new line or range |
 | `ctrl+e` | finish a note in `$EDITOR` instead |
 | `x` | mark this file reviewed |
 | `S` | submit the review to GitHub |
@@ -99,10 +103,12 @@ request number, or by branch for local work, so an agent rewriting files
 underneath you does not orphan them.
 
 Each note records the blob hash of the file it was written against. When the
-file changes, the note is shown as **stale** and detached from its line rather
-than pointing at a line that has since moved. The same applies to a file marked
-reviewed: it keeps its tick and gains a `~`, because silently unticking would
-hide that you had already read it.
+file changes, the note is shown as **needs re-anchor** and detached from its
+line rather than pointing at a line that has since moved. Press `m`, navigate
+to its new line, and press `enter`; press `v` first to select a range. A draft
+that needs re-anchoring cannot be submitted. The same change detection applies
+to a file marked reviewed: it keeps its tick and gains a `~`, because silently
+unticking would hide that you had already read it.
 
 Nothing is sent anywhere until you press `S`. GitHub reviews are atomic, so
 every note is posted as a single review with one event — comment, approve, or
@@ -112,6 +118,20 @@ two versions of the same review from disagreeing.
 
 For a local review with no pull request to post to, `crv --export markdown`
 prints the notes for pasting wherever they need to go.
+
+### Comments and sync
+
+GitHub review discussions are shown as threads. `outdated` means GitHub can no
+longer anchor a thread to the current diff; `resolved` means the discussion was
+closed. These states are independent, and neither blocks your review. Long
+comments expand to eight lines under the cursor; `enter` opens the complete
+scrollable body.
+
+Press `r` to fetch the latest diff and review threads as one update. Local
+drafts are preserved, the cursor stays near the same file and line, and new or
+edited comments are marked until visited. A failed sync leaves the existing
+view intact. See [Comments and sync](docs/comments-and-sync.md) for the complete
+state and failure model.
 
 ## Configuration
 
@@ -209,3 +229,16 @@ goreleaser build --snapshot --clean
 - Mouse support and OSC 52 yank
 - Replying to a teammate's comment thread
 - `LEFT`-side comments on deleted lines
+
+### Follow-up reviews
+
+Reopening a teammate's PR starts from your own threads when you have a submitted
+review, including one made in GitHub's browser UI. Resolved threads stay visible.
+Use `enter` for original context, related changes, replies, and current context;
+`x` verifies locally, `c` replies, and `R` resolves or reopens on GitHub.
+
+Use `a` for all changes since your latest review and `D` for the current PR diff
+and draft re-anchoring. `S` supports clean approvals and pins submission to the
+reviewed commit. `r` refreshes the snapshot and review baseline together.
+See [comments and sync](docs/comments-and-sync.md) for verification and failure
+semantics. Copilot highlighting and automated fix analysis remain TODOs.

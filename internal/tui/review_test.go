@@ -240,19 +240,31 @@ func TestSubmitRefusedForLocalReview(t *testing.T) {
 	}
 }
 
-func TestSubmitRefusedWithNoNotes(t *testing.T) {
+func TestSubmitAvailableWithNoNotes(t *testing.T) {
 	m := newReviewModel(t, func(o *Options) {
 		o.Source = Source{Kind: SourcePR, Repo: "acme/x", PRNumber: 1}
 	})
 	m = press(t, m, "S")
-	if m.mode == modeSubmit {
-		t.Error("submit screen opened with nothing to submit")
+	if m.mode != modeSubmit {
+		t.Error("submit screen should allow a clean approval")
+	}
+}
+
+func TestSubmitWaitsForSync(t *testing.T) {
+	m := newReviewModel(t, func(o *Options) {
+		o.Source = Source{Kind: SourcePR, Repo: "acme/x", PRNumber: 1}
+	})
+	m.review.Add("svc.go", 0, 3, "bbbbbbb", "a note")
+	m.sync.syncing = true
+	m = press(t, m, "S")
+	if m.mode == modeSubmit || !strings.Contains(m.err, "sync") {
+		t.Errorf("submit was not held during sync: mode=%v err=%q", m.mode, m.err)
 	}
 }
 
 // A note written against an older version of the file must not be posted:
 // its line number no longer means what it meant when it was written.
-func TestSubmitRefusedWhenNotesAreStale(t *testing.T) {
+func TestSubmitRefusedWhenDraftsNeedReanchor(t *testing.T) {
 	m := newReviewModel(t, func(o *Options) {
 		o.Source = Source{Kind: SourcePR, Repo: "acme/x", PRNumber: 1}
 	})
@@ -263,8 +275,8 @@ func TestSubmitRefusedWhenNotesAreStale(t *testing.T) {
 	if m.mode == modeSubmit {
 		t.Error("submit screen opened with stale notes")
 	}
-	if !strings.Contains(m.err, "stale") {
-		t.Errorf("err = %q, want it to mention staleness", m.err)
+	if !strings.Contains(m.err, "re-anchor") {
+		t.Errorf("err = %q, want it to mention re-anchoring", m.err)
 	}
 }
 
@@ -339,15 +351,14 @@ func (errFake) Error() string { return "network is down" }
 // Teammates' comments render inline; outdated ones are shown detached rather
 // than dropped.
 func TestExistingCommentsRender(t *testing.T) {
-	live := 3
 	m := newReviewModel(t, func(o *Options) {
 		o.Source = Source{Kind: SourcePR, Repo: "acme/x", PRNumber: 1}
-		o.Comments = []ghsrc.Comment{
-			{ID: 1, Path: "svc.go", Line: 3, Position: &live, Body: "why error?"},
-			{ID: 2, Path: "svc.go", Line: 99, Body: "from an older push"},
+		o.Threads = []ghsrc.Thread{
+			{ID: "T1", RootID: 1, Path: "svc.go", Line: 3, ResolutionKnown: true, Comments: []ghsrc.Comment{{ID: 1, Body: "why error?"}}},
+			{ID: "T2", RootID: 2, Path: "svc.go", Line: 99, Outdated: true, ResolutionKnown: true, Comments: []ghsrc.Comment{{ID: 2, Body: "from an older push"}}},
 		}
-		o.Comments[0].User.Login = "ann"
-		o.Comments[1].User.Login = "bo"
+		o.Threads[0].Comments[0].User.Login = "ann"
+		o.Threads[1].Comments[0].User.Login = "bo"
 	})
 
 	if !hasNoteRow(m, "why error?") {
@@ -357,8 +368,8 @@ func TestExistingCommentsRender(t *testing.T) {
 		t.Error("an outdated comment was dropped instead of shown detached")
 	}
 	for _, row := range m.doc.Rows {
-		if row.Kind == render.RowNote && row.Ann.Author == "bo" && !row.Ann.Stale {
-			t.Error("outdated comment not marked stale")
+		if row.Kind == render.RowNote && row.Ann.Author == "bo" && row.Ann.Kind == render.AnnThread && !row.Ann.Outdated {
+			t.Error("outdated comment not marked outdated")
 		}
 	}
 }

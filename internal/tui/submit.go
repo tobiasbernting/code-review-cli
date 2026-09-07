@@ -7,47 +7,50 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/tobiasbernting/code-review-cli/internal/ghsrc"
+	"github.com/tobiasbernting/code-review-cli/internal/notes"
 )
 
 // submitState drives the review submission screen. Notes are held locally
 // until this point because GitHub reviews are atomic: one review, one
 // notification, and a half-written review never reaches the author.
 type submitState struct {
-	event   string
-	body    string
-	editing bool // the overall review body is being typed
-	sending bool
+	returnMode mode
+	event      string
+	body       string
+	editing    bool // the overall review body is being typed
+	sending    bool
 }
 
 func (m Model) openSubmit() (tea.Model, tea.Cmd) {
+	if m.sync.syncing {
+		m.err = "wait for sync to finish before submitting"
+		return m, nil
+	}
 	if !m.src.CanSubmit() {
 		m.err = "not reviewing a pull request — notes stay local"
 		return m, nil
 	}
-	if len(m.review.Notes) == 0 {
-		m.err = "no notes to submit"
+	if m.needsReanchor() > 0 {
+		m.err = fmt.Sprintf("%d draft(s) need re-anchoring before submission", m.needsReanchor())
 		return m, nil
 	}
-	if m.stale() > 0 {
-		m.err = fmt.Sprintf("%d note(s) are stale — the diff moved; delete or re-anchor them first", m.stale())
-		return m, nil
-	}
-	m.submit = submitState{event: ghsrc.EventComment}
+	m.submit = submitState{event: ghsrc.EventComment, returnMode: m.mode}
 	m.mode = modeSubmit
 	return m, nil
 }
 
-func (m Model) stale() int {
+func (m Model) needsReanchor() int {
 	n := 0
 	for _, note := range m.review.Notes {
-		if noteStale(note.Blob, m.blobs[note.Path]) {
+		current, exists := m.blobs[note.Path]
+		if !exists || noteMoved(note.Blob, current) {
 			n++
 		}
 	}
 	return n
 }
 
-func noteStale(noteBlob, current string) bool {
+func noteMoved(noteBlob, current string) bool {
 	return noteBlob != "" && current != "" && noteBlob != current
 }
 
@@ -76,7 +79,7 @@ func (m Model) handleSubmitKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "esc", "q":
-		m.mode = modeDiff
+		m.mode = m.submit.returnMode
 	case "c":
 		m.submit.event = ghsrc.EventComment
 	case "a":
@@ -95,6 +98,14 @@ func (m Model) handleSubmitKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.submit.editing = true
 		m.in.start("review body ›", m.submit.body)
 	case "enter":
+		if m.submit.event == ghsrc.EventComment && strings.TrimSpace(m.submit.body) == "" && len(m.review.Notes) == 0 {
+			m.err = "add a review body or a comment, or choose approve"
+			return m, nil
+		}
+		if m.submit.event == ghsrc.EventRequestChanges && strings.TrimSpace(m.submit.body) == "" {
+			m.err = "requesting changes requires a review body — press b to add one"
+			return m, nil
+		}
 		if m.src.OwnPR() && m.submit.event != ghsrc.EventComment {
 			m.err = "GitHub does not let you approve or request changes on your own pull request"
 			return m, nil
@@ -124,7 +135,7 @@ func (m Model) sendReview() tea.Cmd {
 
 	src, event, body := m.src, m.submit.event, m.submit.body
 	return func() tea.Msg {
-		err := src.Client.SubmitReview(src.Repo, src.PRNumber, event, body, comments)
+		err := src.Client.SubmitReviewAt(src.Repo, src.PRNumber, src.HeadSHA, event, body, comments)
 		return submitResultMsg{err: err, event: event}
 	}
 }
@@ -140,13 +151,14 @@ func (m Model) applySubmitResult(msg submitResultMsg) (tea.Model, tea.Cmd) {
 	// GitHub owns these comments now. Dropping the local copies is what keeps
 	// there from being two versions of the same review.
 	sent := len(m.review.Notes)
+	submitted := append([]notes.Note(nil), m.review.Notes...)
 	m.review.Notes = nil
 	m.save()
 	m.rebuild()
-	m.mode = modeDiff
-	m.status = fmt.Sprintf("submitted %d comment%s as %s — reopen to see them from GitHub",
+	m.mode = m.submit.returnMode
+	m.status = fmt.Sprintf("submitted %d comment%s as %s; syncing",
 		sent, plural(sent), strings.ToLower(strings.ReplaceAll(msg.event, "_", " ")))
-	return m, nil
+	return m.startSync(submitted)
 }
 
 func (m Model) submitView() string {

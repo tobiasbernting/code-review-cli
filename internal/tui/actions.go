@@ -31,7 +31,7 @@ func (m Model) cursorLine() (path string, line, hunk int, ok bool) {
 		}
 		return path, row.Line.NewNum, row.HunkIdx, true
 	case render.RowNote:
-		if row.Ann != nil && row.Ann.Line > 0 {
+		if row.HunkIdx >= 0 && row.Ann != nil && row.Ann.Line > 0 {
 			return path, row.Ann.Line, row.HunkIdx, true
 		}
 	}
@@ -39,6 +39,10 @@ func (m Model) cursorLine() (path string, line, hunk int, ok bool) {
 }
 
 func (m Model) startComment() (tea.Model, tea.Cmd) {
+	if m.changesView {
+		m.err = "press D for the current PR diff before editing draft anchors"
+		return m, nil
+	}
 	path, line, hunk, ok := m.cursorLine()
 	if !ok {
 		m.err = "put the cursor on an added or unchanged line to comment"
@@ -75,6 +79,10 @@ func (m Model) startComment() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) toggleRangeAnchor() (tea.Model, tea.Cmd) {
+	if m.changesView {
+		m.err = "press D for the current PR diff before editing draft anchors"
+		return m, nil
+	}
 	if m.rangeAnchor > 0 {
 		m.rangeAnchor, m.rangeAnchorPath, m.rangeAnchorHunk = 0, "", -1
 		m.status = "selection cleared"

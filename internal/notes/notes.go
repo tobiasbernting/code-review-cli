@@ -62,12 +62,21 @@ type FileMark struct {
 	Blob     string `json:"blob"`
 }
 
+// ThreadMark records the code a reviewer independently verified. It is local
+// state and does not imply that the corresponding GitHub thread is resolved.
+type ThreadMark struct {
+	Fingerprint string    `json:"fingerprint"`
+	CommitID    string    `json:"commit_id"`
+	VerifiedAt  time.Time `json:"verified_at"`
+}
+
 // Review is every note and mark for one review scope.
 type Review struct {
-	Scope   string              `json:"scope"`
-	Notes   []Note              `json:"notes"`
-	Files   map[string]FileMark `json:"files"`
-	Updated time.Time           `json:"updated"`
+	Threads map[string]ThreadMark `json:"threads,omitempty"`
+	Scope   string                `json:"scope"`
+	Notes   []Note                `json:"notes"`
+	Files   map[string]FileMark   `json:"files"`
+	Updated time.Time             `json:"updated"`
 
 	path string
 }
@@ -134,7 +143,7 @@ func LoadAt(path, scope string) (*Review, error) {
 
 // Save writes the review, or removes the file when nothing is left to store.
 func (r *Review) Save() error {
-	if len(r.Notes) == 0 && len(r.Files) == 0 {
+	if len(r.Notes) == 0 && len(r.Files) == 0 && len(r.Threads) == 0 {
 		err := os.Remove(r.path)
 		if os.IsNotExist(err) {
 			return nil
@@ -183,6 +192,26 @@ func (r *Review) Update(id, body string) bool {
 			r.Notes[i].Body = body
 			return true
 		}
+	}
+	return false
+}
+
+// Reanchor moves a note without changing its identity or body.
+func (r *Review) Reanchor(id, path string, start, end int, side, blob string) bool {
+	for i := range r.Notes {
+		if r.Notes[i].ID != id {
+			continue
+		}
+		r.Notes[i].Path = path
+		r.Notes[i].StartLine = 0
+		if start > 0 && start != end {
+			r.Notes[i].StartLine = start
+		}
+		r.Notes[i].Line = end
+		r.Notes[i].Side = side
+		r.Notes[i].Blob = blob
+		r.sortNotes()
+		return true
 	}
 	return false
 }
@@ -275,4 +304,34 @@ func newID() string {
 		return strconv.FormatInt(time.Now().UnixNano(), 16)
 	}
 	return hex.EncodeToString(b[:])
+}
+
+// SetThreadVerified records verification of the relevant code, independent
+// of changes elsewhere in the PR. Unknown code cannot be marked verified.
+func (r *Review) SetThreadVerified(id, fingerprint, commitID string, verified bool) {
+	if !verified {
+		delete(r.Threads, id)
+		return
+	}
+	if id == "" || strings.TrimSpace(fingerprint) == "" {
+		return
+	}
+	if r.Threads == nil {
+		r.Threads = make(map[string]ThreadMark)
+	}
+	r.Threads[id] = ThreadMark{Fingerprint: fingerprint, CommitID: commitID, VerifiedAt: time.Now().UTC()}
+}
+
+// ThreadState only reports verified when the current relevant code matches
+// the saved mark. A changed or unavailable fingerprint needs verification
+// again, while preserving the prior mark for context.
+func (r *Review) ThreadState(id, fingerprint string) (verified, changed bool) {
+	mark, ok := r.Threads[id]
+	if !ok {
+		return false, false
+	}
+	if strings.TrimSpace(fingerprint) == "" || mark.Fingerprint == "" || mark.Fingerprint != fingerprint {
+		return false, true
+	}
+	return true, false
 }

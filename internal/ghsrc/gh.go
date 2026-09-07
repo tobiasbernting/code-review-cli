@@ -32,6 +32,10 @@ type Client struct {
 	// pull requests from every repository you are involved in, which are
 	// mostly not the one you are standing in.
 	Repo string
+
+	// runOverride is an internal seam for exercising multi-command operations
+	// without invoking gh. Production clients leave it nil.
+	runOverride func(stdin []byte, args ...string) (string, error)
 }
 
 // Preflight checks that gh exists and is authenticated. It is called once per
@@ -116,16 +120,23 @@ func (c Client) prArgs(args ...string) []string {
 
 // Comment is one existing review comment written by a teammate.
 type Comment struct {
-	ID        int64  `json:"id"`
-	Path      string `json:"path"`
-	Body      string `json:"body"`
-	Side      string `json:"side"`
-	Line      int    `json:"line"`
-	StartLine int    `json:"start_line"`
-	CreatedAt string `json:"created_at"`
-	URL       string `json:"html_url"`
-	InReplyTo int64  `json:"in_reply_to_id"`
-	User      struct {
+	DiffHunk            string `json:"diff_hunk"`
+	OriginalCommitID    string `json:"original_commit_id"`
+	CommitID            string `json:"commit_id"`
+	OriginalLine        int    `json:"original_line"`
+	OriginalStartLine   int    `json:"original_start_line"`
+	PullRequestReviewID int64  `json:"pull_request_review_id"`
+	ID                  int64  `json:"id"`
+	Path                string `json:"path"`
+	Body                string `json:"body"`
+	Side                string `json:"side"`
+	Line                int    `json:"line"`
+	StartLine           int    `json:"start_line"`
+	CreatedAt           string `json:"created_at"`
+	UpdatedAt           string `json:"updated_at"`
+	URL                 string `json:"html_url"`
+	InReplyTo           int64  `json:"in_reply_to_id"`
+	User                struct {
 		Login string `json:"login"`
 	} `json:"user"`
 
@@ -188,6 +199,7 @@ func reviewPayload(event, body string, comments []ReviewComment) ([]byte, error)
 }
 
 type reviewRequest struct {
+	CommitID string          `json:"commit_id,omitempty"`
 	Body     string          `json:"body,omitempty"`
 	Event    string          `json:"event"`
 	Comments []ReviewComment `json:"comments,omitempty"`
@@ -198,13 +210,41 @@ type reviewRequest struct {
 // review never reaches the author, and one review sends one notification
 // rather than one per comment.
 func (c Client) SubmitReview(repo string, number int, event, body string, comments []ReviewComment) error {
+	return c.submitReview(repo, number, "", event, body, comments)
+}
+
+// SubmitReviewAt pins a review to the revision that was displayed. The head
+// check refuses a review that is already out of date; commit_id also keeps a
+// push racing with this request from silently approving unseen code.
+func (c Client) SubmitReviewAt(repo string, number int, headSHA, event, body string, comments []ReviewComment) error {
+	if strings.TrimSpace(headSHA) == "" {
+		return errors.New("the reviewed commit is unknown — reopen the pull request before submitting")
+	}
+	return c.submitReview(repo, number, headSHA, event, body, comments)
+}
+
+func (c Client) submitReview(repo string, number int, headSHA, event, body string, comments []ReviewComment) error {
 	if event != EventComment && event != EventApprove && event != EventRequestChanges {
 		return fmt.Errorf("unknown review event %q", event)
 	}
-	if event == EventComment && body == "" && len(comments) == 0 {
+	if event == EventComment && strings.TrimSpace(body) == "" && len(comments) == 0 {
 		return errors.New("nothing to submit")
 	}
-	payload, err := reviewPayload(event, body, comments)
+	if event == EventRequestChanges && strings.TrimSpace(body) == "" {
+		return errors.New("requesting changes requires a review body")
+	}
+	if headSHA != "" {
+		remote := c
+		remote.Repo = repo
+		pr, err := remote.PR(number)
+		if err != nil {
+			return fmt.Errorf("could not check the pull request head before submitting: %w", err)
+		}
+		if pr.HeadSHA != headSHA {
+			return errors.New("the pull request changed since you opened it — reopen and review the new changes before submitting; your notes are kept")
+		}
+	}
+	payload, err := json.Marshal(reviewRequest{CommitID: headSHA, Body: body, Event: event, Comments: comments})
 	if err != nil {
 		return err
 	}
@@ -216,6 +256,9 @@ func (c Client) SubmitReview(repo string, number int, event, body string, commen
 func (c Client) run(args ...string) (string, error) { return c.runInput(nil, args...) }
 
 func (c Client) runInput(stdin []byte, args ...string) (string, error) {
+	if c.runOverride != nil {
+		return c.runOverride(stdin, args...)
+	}
 	cmd := exec.Command("gh", args...)
 	cmd.Dir = c.Dir
 	cmd.Env = os.Environ()
