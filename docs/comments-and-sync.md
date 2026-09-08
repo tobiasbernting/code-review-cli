@@ -141,3 +141,15 @@ retains local drafts. A successful submission refreshes the baseline.
 
 Copilot issue highlighting and automated “did this fix address my comment?”
 analysis remain TODOs.
+
+
+## Attention tasks
+
+The optional [attention queue](attention-queue.md) persists work separately from
+review drafts, local verification and GitHub read state. Opening or replying to a
+thread does not mark its conversation task Done. A local Done applies only to the
+selected reason and observed generation; later relevant activity can reopen it.
+Attention navigation can open a thread the viewer joined, while the ordinary
+follow-up view continues to show threads they started. Uncertain notifications
+remain unread pending classification or explicit Keep/Dismiss. The enabled worker
+marks confidently classified PR notifications read after saving local state.

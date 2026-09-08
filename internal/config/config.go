@@ -25,6 +25,7 @@ const (
 )
 
 type Config struct {
+	Attention Attention `toml:"attention"`
 	// Host is the GitHub hostname, e.g. "github.com" or an enterprise host.
 	// Empty means "whatever gh is configured to use".
 	Host string `toml:"host"`
@@ -58,6 +59,7 @@ type Config struct {
 
 func Defaults() Config {
 	return Config{
+		Attention: Attention{PollInterval: "60s", DesktopNotifications: true},
 		Theme:     "dark",
 		Density:   "comfortable",
 		Untracked: true,
@@ -95,10 +97,15 @@ func Load(repoRoot string) (Config, error) {
 			return cfg, err
 		}
 	}
+	attention := cfg.Attention
 	if repoRoot != "" {
 		if err := mergeFile(&cfg, filepath.Join(repoRoot, RepoFile)); err != nil {
 			return cfg, err
 		}
+	}
+	cfg.Attention = attention
+	if err := cfg.Attention.Validate(); err != nil {
+		return cfg, err
 	}
 	if err := mergeEnv(&cfg); err != nil {
 		return cfg, err
@@ -124,6 +131,15 @@ func mergeFile(cfg *Config, path string) error {
 	}
 	for _, key := range md.Keys() {
 		switch key.String() {
+		case "attention":
+		case "attention.enabled":
+			cfg.Attention.Enabled = file.Attention.Enabled
+		case "attention.repositories":
+			cfg.Attention.Repositories = file.Attention.Repositories
+		case "attention.poll_interval":
+			cfg.Attention.PollInterval = file.Attention.PollInterval
+		case "attention.desktop_notifications":
+			cfg.Attention.DesktopNotifications = file.Attention.DesktopNotifications
 		case "host":
 			cfg.Host = file.Host
 		case "theme":

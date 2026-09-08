@@ -1,0 +1,173 @@
+{
+  "pr": {
+    "number": 1,
+    "title": "Synthetic PR",
+    "body": "",
+    "state": "open",
+    "html_url": "https://github.com/o/r/pull/1",
+    "draft": false,
+    "user": {
+      "login": "author"
+    },
+    "head": {
+      "sha": "head-1"
+    },
+    "requested_reviewers": [],
+    "requested_teams": [],
+    "base": {
+      "repo": {
+        "id": 42
+      }
+    }
+  },
+  "comments": [],
+  "reviews": [],
+  "reviewComments": [
+    {
+      "id": 10,
+      "body": "Please explain this",
+      "path": "a.go",
+      "line": 1,
+      "user": {
+        "login": "other"
+      },
+      "created_at": "2026-09-01T10:00:00Z",
+      "html_url": "https://github.com/o/r/pull/1#discussion_r10"
+    },
+    {
+      "id": 11,
+      "in_reply_to_id": 10,
+      "body": "I can help",
+      "path": "a.go",
+      "line": 1,
+      "user": {
+        "login": "me"
+      },
+      "created_at": "2026-09-01T11:00:00Z",
+      "html_url": "https://github.com/o/r/pull/1#discussion_r11"
+    },
+    {
+      "id": 12,
+      "in_reply_to_id": 10,
+      "body": "Here is the explanation",
+      "path": "a.go",
+      "line": 1,
+      "user": {
+        "login": "other"
+      },
+      "created_at": "2026-09-01T12:00:00Z",
+      "html_url": "https://github.com/o/r/pull/1#discussion_r12"
+    }
+  ],
+  "threads": [
+    {
+      "data": {
+        "repository": {
+          "pullRequest": {
+            "reviewThreads": {
+              "nodes": [
+                {
+                  "id": "thread-1",
+                  "path": "a.go",
+                  "line": 1,
+                  "diffSide": "RIGHT",
+                  "isResolved": false,
+                  "comments": {
+                    "nodes": [
+                      {
+                        "databaseId": 10
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "checks": {
+    "check_runs": []
+  },
+  "statuses": [],
+  "merge": {
+    "data": {
+      "repository": {
+        "pullRequest": {
+          "headRefOid": "head-1",
+          "mergeStateStatus": "CLEAN",
+          "mergeable": "MERGEABLE",
+          "reviewDecision": "APPROVED",
+          "viewerCanUpdate": true,
+          "autoMergeRequest": null,
+          "mergeQueueEntry": null,
+          "commits": {
+            "nodes": [
+              {
+                "commit": {
+                  "statusCheckRollup": {
+                    "contexts": {
+                      "nodes": [
+                        {
+                          "__typename": "CheckRun",
+                          "isRequired": true,
+                          "status": "COMPLETED",
+                          "conclusion": "SUCCESS"
+                        }
+                      ],
+                      "pageInfo": {
+                        "hasNextPage": false,
+                        "endCursor": null
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "dismissal": {
+    "data": {
+      "repository": {
+        "pullRequest": {
+          "timelineItems": {
+            "nodes": [
+              {
+                "id": "dismissal-1",
+                "previousReviewState": "APPROVED",
+                "url": "https://github.com/o/r/pull/1#event-1",
+                "createdAt": "2026-09-01T13:00:00Z",
+                "review": {
+                  "databaseId": 20
+                }
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            }
+          }
+        }
+      }
+    }
+  },
+  "requests": {
+    "data": {
+      "repository": {
+        "pullRequest": {
+          "reviewRequests": {
+            "nodes": [],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            }
+          }
+        }
+      }
+    }
+  }
+}

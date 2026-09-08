@@ -208,13 +208,14 @@ const (
 
 // Source describes what is being reviewed.
 type Source struct {
-	HeadSHA  string
-	FollowUp *followup.Session
-	Kind     SourceKind
-	Title    string
-	Repo     string // "owner/name", pull requests only
-	PRNumber int
-	Client   ghsrc.Client
+	AttentionURL string
+	HeadSHA      string
+	FollowUp     *followup.Session
+	Kind         SourceKind
+	Title        string
+	Repo         string // "owner/name", pull requests only
+	PRNumber     int
+	Client       ghsrc.Client
 
 	// Author is the pull request's author and Viewer is you. GitHub rejects
 	// approving or requesting changes on your own pull request with a bare

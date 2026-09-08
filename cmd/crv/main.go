@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -97,6 +98,8 @@ func usage() string {
 
 usage:
   crv                the pull requests waiting on your review
+  crv attention sync|diagnose|history
+  crv service run|install|uninstall|start|stop|status
   crv .              review uncommitted work (including untracked files)
   crv <range>        review a range, e.g. main...feature or HEAD~3..HEAD
   crv <number>       review a pull request, e.g. crv 42
@@ -218,13 +221,25 @@ func run() error {
 		fmt.Fprintf(os.Stderr, "crv: moved your notes and settings\n     from %s\n     to   %s\n", from, to)
 	}
 
+	if fs.NArg() > 0 && (fs.Arg(0) == "attention" || fs.Arg(0) == "service") {
+		return attentionCommand(fs.Args())
+	}
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
 	repo, err := gitsrc.Open(cwd)
 	if err != nil {
-		return err
+		userCfg, loadErr := config.LoadAttention()
+		if loadErr != nil {
+			return loadErr
+		}
+		if fs.NArg() == 0 && userCfg.Attention.Enabled {
+			repo = &gitsrc.Repo{Root: cwd}
+		} else {
+			return err
+		}
 	}
 
 	cfg, err := config.Load(repo.Root)
@@ -265,7 +280,20 @@ func run() error {
 		if !sel.Chosen {
 			return nil
 		}
-		return reviewPR(repo, cfg, sel.Repo, sel.Number)
+		if cfg.Attention.Enabled {
+			worker, loadErr := config.LoadAttention()
+			if loadErr != nil {
+				return loadErr
+			}
+			cfg.Host = worker.Host
+			if cfg.Host == "" {
+				cfg.Host = os.Getenv("GH_HOST")
+			}
+			if cfg.Host == "" {
+				cfg.Host = "github.com"
+			}
+		}
+		return reviewPR(repo, cfg, sel.Repo, sel.Number, sel.AttentionURL)
 	}
 
 	target := "."
@@ -339,6 +367,9 @@ func start(repo *gitsrc.Repo, cfg config.Config, src tui.Source, files []*diffpa
 
 // runQueue shows the review queue and returns what was chosen.
 func runQueue(repo *gitsrc.Repo, cfg config.Config, limit int) (tui.Selection, error) {
+	if cfg.Attention.Enabled {
+		return runAttentionQueue(cfg, limit)
+	}
 	client := ghsrc.Client{Host: cfg.Host, Dir: repo.Root}
 	if err := client.Preflight(); err != nil {
 		return tui.Selection{}, fmt.Errorf("%w\n\nthe queue needs gh; local reviews (crv . and crv <range>) do not", err)
@@ -397,10 +428,29 @@ func printQueue(client ghsrc.Client, limit int) error {
 // reviewPR opens a pull request chosen from the queue. It may live in another
 // repository than the working directory, so the client is pointed at that
 // repository by name rather than by path.
-func reviewPR(repo *gitsrc.Repo, cfg config.Config, name string, number int) error {
+func reviewPR(repo *gitsrc.Repo, cfg config.Config, name string, number int, attentionURL ...string) error {
+	if cfg.Attention.Enabled {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			e, _, err := attentionEngine(ctx)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "crv: attention refresh:", err)
+				return
+			}
+			defer e.Store.Close()
+			if err = e.Sync(ctx); err != nil {
+				fmt.Fprintln(os.Stderr, "crv: attention refresh:", err)
+			}
+		}()
+	}
+
 	client := ghsrc.Client{Host: cfg.Host, Dir: repo.Root, Repo: name}
 
 	src, files, err := loadPR(client, name, number)
+	if len(attentionURL) > 0 {
+		src.AttentionURL = attentionURL[0]
+	}
 	if err != nil {
 		return err
 	}
@@ -487,6 +537,8 @@ func printConfig(cfg config.Config, repoRoot string) error {
 	fmt.Printf("untracked  %t\n", cfg.Untracked)
 	fmt.Printf("color      %t\n", cfg.Color)
 	fmt.Printf("width      %d\n", cfg.Width)
+	fmt.Printf("attention  %t (user config only)\n", cfg.Attention.Enabled)
+	fmt.Printf("scope      %s\n", strings.Join(cfg.Attention.Repositories, ", "))
 	fmt.Printf("\nuser file  %s%s\n", userPath, exists(userPath))
 	repoFile := filepath.Join(repoRoot, config.RepoFile)
 	fmt.Printf("repo file  %s%s\n", repoFile, exists(repoFile))

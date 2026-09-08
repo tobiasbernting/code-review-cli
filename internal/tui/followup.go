@@ -32,6 +32,26 @@ func (m *Model) installFollowUp(s *followup.Session) {
 	if s.Baseline != nil {
 		m.mode = modeThreads
 	}
+	if m.src.AttentionURL != "" {
+		found := false
+		for _, t := range s.Threads {
+			for _, c := range t.Comments {
+				if c.URL == m.src.AttentionURL {
+					m.follow.threads = []ghsrc.Thread{t}
+					m.mode = modeThread
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found && strings.Contains(m.src.AttentionURL, "#") {
+			m.mode = modeDiff
+			m.status = "Attention content is available at " + m.src.AttentionURL
+		}
+	}
 	if len(s.Warnings) > 0 {
 		m.err = strings.Join(s.Warnings, "; ")
 	}
@@ -487,7 +507,11 @@ func (m Model) threadLines() []string {
 	}
 	if len(t.Comments) > 0 {
 		c := t.Comments[0]
-		appendText("Your original comment · " + shortSHA(c.OriginalCommitID))
+		label := "Your original comment"
+		if !strings.EqualFold(c.User.Login, s.Viewer) {
+			label = "Original comment by " + c.User.Login
+		}
+		appendText(label + " · " + shortSHA(c.OriginalCommitID))
 		appendText(c.Body)
 		if c.DiffHunk != "" {
 			lines = append(lines, "", " Original code context (when this comment was written):")
