@@ -219,7 +219,12 @@ func (m *Model) overlay() render.Overlay {
 	})
 }
 
-func (m Model) Init() tea.Cmd { return tickSyncAge() }
+func (m Model) Init() tea.Cmd {
+	if m.mode == modeThread {
+		return tea.Batch(tickSyncAge(), m.loadThreadContext())
+	}
+	return tickSyncAge()
+}
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {

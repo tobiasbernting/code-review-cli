@@ -7,6 +7,7 @@ package ghsrc
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ErrNotInstalled is returned when gh is missing, so callers can tell the
@@ -22,6 +24,8 @@ import (
 var ErrNotInstalled = errors.New("gh not found — install it: https://cli.github.com")
 
 type Client struct {
+	Context           context.Context
+	AttentionPollHint func(time.Duration)
 	// Host overrides the GitHub hostname. Empty means gh's own configuration
 	// decides, which is what makes a personal account and an enterprise host
 	// both work without special-casing either.
@@ -260,7 +264,13 @@ func (c Client) runInput(stdin []byte, args ...string) (string, error) {
 	if c.runOverride != nil {
 		return c.runOverride(stdin, args...)
 	}
-	cmd := exec.Command("gh", args...)
+	ctx := c.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "gh", args...)
 	cmd.Dir = c.Dir
 	cmd.Env = os.Environ()
 	if c.Host != "" {

@@ -8,6 +8,13 @@ review — without leaving the terminal.
 
 <img src="docs/img/theme-dark.svg" alt="crv reviewing a diff: added and deleted lines marked at the left edge, the cursor row lit, and two review comments wrapped under the line they belong to" width="100%">
 
+
+Opt-in [attention mode](docs/attention-queue.md) adds durable tasks for review
+requests, mentions, joined-thread replies, author feedback, CI failures and merge
+readiness, with scoped GitHub notification cleanup and a macOS background worker.
+Conversation tasks require explicit Done; reading a notification does not finish
+them. Existing behavior is retained until attention is configured and enabled.
+
 ## Install
 
 ```sh
@@ -179,7 +186,9 @@ that needs re-anchoring cannot be submitted. The same change detection applies
 to a file marked reviewed: it keeps its tick and gains a `~`, because silently
 unticking would hide that you had already read it.
 
-Nothing is sent anywhere until you press `S`. GitHub reviews are atomic, so
+Review drafts are sent when you press `S`; explicit thread replies and resolution
+actions also write to GitHub. When attention is enabled, its worker automatically
+marks confidently classified PR notifications read. GitHub reviews are atomic, so
 every note is posted as a single review with one event — comment, approve, or
 request changes — rather than as a stream of separate comments. Once submitted,
 the local copies are dropped: GitHub owns them from then on, which is what stops

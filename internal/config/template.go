@@ -64,6 +64,16 @@ func Template() string {
 
 # Output width used when stdout is not a terminal.
 # width = %d
+
+# Attention worker: USER CONFIG ONLY. Checkout settings are ignored.
+# Set actual repositories before enabling; the list below is intentionally empty.
+# Dotted keys are equivalent to an [attention] table.
+# attention.enabled = false
+# attention.repositories = []
+# attention.poll_interval = "60s"
+# attention.desktop_notifications = true
+# When enabled, confidently classified PR notifications are marked read after
+# local persistence. Conversation tasks still need explicit Done.
 `, RepoFile, RepoFile, d.Theme, d.Density, d.Untracked, d.Color, d.Width)
 }
 

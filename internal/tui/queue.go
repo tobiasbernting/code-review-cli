@@ -15,9 +15,10 @@ import (
 
 // Selection is what the queue returns: the pull request to open, if any.
 type Selection struct {
-	Repo   string
-	Number int
-	Chosen bool
+	AttentionURL string
+	Repo         string
+	Number       int
+	Chosen       bool
 }
 
 // QueueModel is the list of pull requests waiting on you. It is a separate
