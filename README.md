@@ -154,6 +154,8 @@ and piped output (120 columns unless `width` says otherwise) does the same.
 layout = "split"      # unified or split
 ```
 
+<img src="docs/img/layout-split.svg" alt="the same diff in split layout: old lines on the left, new lines on the right, a deletion paired with the addition that replaced it and blank filler where one side has no counterpart" width="100%">
+
 Try one before committing to it, without touching the file:
 
 ```sh

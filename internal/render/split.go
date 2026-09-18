@@ -51,6 +51,18 @@ func pairHunk(lines []diffparse.Line) [][2]int {
 	return out
 }
 
+// IsCode reports whether the row shows diff lines, in either layout.
+func (r Row) IsCode() bool { return r.Kind == RowCode || r.Kind == RowPair }
+
+// NewNum is the new-side line number a code row shows: zero for a deleted
+// line, and for a split row whose new side is filler.
+func (r Row) NewNum() int {
+	if r.Kind == RowPair {
+		return r.Right.NewNum
+	}
+	return r.Line.NewNum
+}
+
 // LineRow finds the row showing a line of a file, whichever mode the document
 // was built in, so a view can keep its cursor on the same line when the
 // layout changes underneath it. The new-side number is tried first, since it
@@ -68,19 +80,14 @@ func (d *Document) LineRow(fileIdx, newNum, oldNum int) (int, bool) {
 	}
 	find := func(match func(Row) bool) (int, bool) {
 		for i := start; i < end; i++ {
-			if row := d.Rows[i]; (row.Kind == RowCode || row.Kind == RowPair) && match(row) {
+			if row := d.Rows[i]; row.IsCode() && match(row) {
 				return i, true
 			}
 		}
 		return 0, false
 	}
 	if newNum > 0 {
-		if i, ok := find(func(row Row) bool {
-			if row.Kind == RowPair {
-				return row.Right.NewNum == newNum
-			}
-			return row.Line.NewNum == newNum
-		}); ok {
+		if i, ok := find(func(row Row) bool { return row.NewNum() == newNum }); ok {
 			return i, true
 		}
 	}

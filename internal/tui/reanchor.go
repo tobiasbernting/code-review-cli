@@ -135,8 +135,8 @@ func (m Model) cursorCodeLine() (path string, line, hunk int, ok bool) {
 		return "", 0, -1, false
 	}
 	row := m.doc.Rows[m.cursor]
-	if row.Kind != render.RowCode || row.Line.NewNum == 0 || row.FileIdx >= len(m.files) {
+	if !row.IsCode() || row.NewNum() == 0 || row.FileIdx >= len(m.files) {
 		return "", 0, row.HunkIdx, false
 	}
-	return m.files[row.FileIdx].Path(), row.Line.NewNum, row.HunkIdx, true
+	return m.files[row.FileIdx].Path(), row.NewNum(), row.HunkIdx, true
 }

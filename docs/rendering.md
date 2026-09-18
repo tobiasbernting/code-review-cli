@@ -250,7 +250,8 @@ rather than relying on shading.
 
 `TestWritePreviewSVG` renders `testdata/dense.diff` through the real renderer
 at 24-bit colour — annotations expanded, as the plain-text path prints them —
-and writes one SVG per theme to `docs/img/`. It is a test
+and writes one SVG per theme to `docs/img/`, plus `layout-split.svg` for the
+split layout at 160 columns. It is a test
 because that is where the renderer, the fixture and the overlay already live,
 and it is skipped unless `-preview` is passed. SVG rather than a terminal
 capture: diffable in review, no font needed on the reader's machine, and the

@@ -551,7 +551,7 @@ func (m Model) threadLines() []string {
 }
 
 func (m Model) renderThreadDiff(files []*diffparse.FileDiff) []string {
-	doc := render.Build(files, m.hl, render.Overlay{}, m.layout)
+	doc := render.Build(files, m.hl, render.Overlay{}, m.layout.Fit(m.width))
 	r := render.NewRenderer(m.theme, doc)
 	lines := make([]string, 0, len(doc.Rows))
 	for _, row := range doc.Rows {

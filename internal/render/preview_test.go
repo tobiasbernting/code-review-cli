@@ -13,11 +13,10 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
-	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
 )
 
-// preview regenerates the theme screenshots the README and docs/rendering.md
-// embed:
+// preview regenerates the theme and split-layout screenshots the README and
+// docs/rendering.md embed:
 //
 //	go test ./internal/render -run TestWritePreviewSVG -preview docs/img
 //
@@ -28,13 +27,16 @@ import (
 var preview = flag.String("preview", "", "write theme screenshots to this directory, relative to the repository root")
 
 const (
-	previewCols   = 100
-	previewCharW  = 8.4
-	previewLineH  = 19.0
-	previewPad    = 14.0
-	previewSize   = 14.0
-	previewBase   = 13.5 // baseline within a line box
-	previewFamily = "ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace"
+	previewCols = 100
+	// previewSplitCols is wide enough for split to be drawn rather than fall
+	// back, with room left over for the code in each pane.
+	previewSplitCols = 160
+	previewCharW     = 8.4
+	previewLineH     = 19.0
+	previewPad       = 14.0
+	previewSize      = 14.0
+	previewBase      = 13.5 // baseline within a line box
+	previewFamily    = "ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace"
 )
 
 func TestWritePreviewSVG(t *testing.T) {
@@ -54,34 +56,39 @@ func TestWritePreviewSVG(t *testing.T) {
 	files := denseFiles(t)
 	ov := denseOverlay()
 
-	for _, name := range ThemeNames() {
-		th, _ := ThemeByName(name)
-		doc := Build(files, NewHighlighter(th.Syntax, true), ov, Layout{})
+	write := func(file string, th Theme, layout Layout, cols int) {
+		doc := Build(files, NewHighlighter(th.Syntax, true), ov, layout.Fit(cols))
 		r := NewRenderer(th, doc)
 
 		var lines []string
 		for _, row := range doc.Rows {
 			// Park the cursor on the added line, so the screenshot shows
 			// what focus does to the grid.
-			focus := row.Kind == RowCode && row.Line.Kind == diffparse.KindAdd && row.Line.NewNum == 13
+			focus := row.IsCode() && row.NewNum() == 13
 			// maxLines 0: annotations expand, the way the plain-text path
 			// prints them, so the screenshot shows a wrapped conversation.
-			lines = append(lines, r.RenderLines(row, previewCols, 0, focus, 0)...)
+			lines = append(lines, r.RenderLines(row, cols, 0, focus, 0)...)
 		}
 
-		path := filepath.Join(dir, "theme-"+name+".svg")
-		if err := os.WriteFile(path, []byte(ansiToSVG(lines, th.Bg)), 0o644); err != nil {
+		path := filepath.Join(dir, file)
+		if err := os.WriteFile(path, []byte(ansiToSVG(lines, th.Bg, cols)), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		t.Logf("wrote %s", path)
 	}
+
+	for _, name := range ThemeNames() {
+		th, _ := ThemeByName(name)
+		write("theme-"+name+".svg", th, Layout{}, previewCols)
+	}
+	write("layout-split.svg", DefaultTheme(), Layout{Mode: ModeSplit}, previewSplitCols)
 }
 
 // ansiToSVG paints ANSI-styled lines as SVG: one rect per background run, one
 // text element per foreground run, every run given an explicit textLength so
 // the grid holds whatever font the reader's browser picks.
-func ansiToSVG(lines []string, bg string) string {
-	width := previewCols*previewCharW + 2*previewPad
+func ansiToSVG(lines []string, bg string, cols int) string {
+	width := float64(cols)*previewCharW + 2*previewPad
 	height := float64(len(lines))*previewLineH + 2*previewPad
 
 	var b strings.Builder
