@@ -13,33 +13,33 @@ import (
 // Every setting is commented out on purpose. A file that lists real values
 // pins them: change a default in a later version and anyone holding such a
 // file never sees it, because their file mentions the key. Commented lines
-// document what exists and what it currently defaults to, while leaving crv
+// document what exists and what it currently defaults to, while leaving krv
 // free to change its mind.
 func Template() string {
 	d := Defaults()
-	return fmt.Sprintf(`# crv configuration
+	return fmt.Sprintf(`# krv configuration
 #
 # Every setting is optional and shown here with its current default.
-# Uncomment a line to override it — while a line stays commented, crv keeps
+# Uncomment a line to override it — while a line stays commented, krv keeps
 # using its own default, including if that default changes in a later version.
 #
 # Precedence, highest first:
 #   1. command-line flags
-#   2. environment: CRV_HOST, CRV_THEME, CRV_SYNTAX, CRV_DENSITY,
-#      CRV_LAYOUT, CRV_EDITOR, CRV_WIDTH, CRV_UNTRACKED, CRV_COLOR,
+#   2. environment: KRV_HOST, KRV_THEME, KRV_SYNTAX, KRV_DENSITY,
+#      KRV_LAYOUT, KRV_EDITOR, KRV_WIDTH, KRV_UNTRACKED, KRV_COLOR,
 #      NO_COLOR
 #   3. %s in the repository being reviewed
 #   4. this file
 #
-# Run "crv --config" to see what is actually in effect.
+# Run "krv --config" to see what is actually in effect.
 
-# GitHub hostname. Left unset, crv uses whatever gh is configured with, which
+# GitHub hostname. Left unset, krv uses whatever gh is configured with, which
 # is usually what you want. Set it in a repository's %s to review
 # on an enterprise host without changing anything globally.
 # host = "github.example.com"
 
 # Colour theme: dark, light or high-contrast. Pick the one that matches your
-# terminal — crv does not guess, because guessing wrong is worse than being
+# terminal — krv does not guess, because guessing wrong is worse than being
 # told once.
 # theme = "%s"
 
@@ -52,15 +52,15 @@ func Template() string {
 # density = "%s"
 
 # Diff layout: unified interleaves old and new in one column; split puts them
-# side by side. Split needs a wide terminal — below 140 columns crv draws
+# side by side. Split needs a wide terminal — below 140 columns krv draws
 # unified until there is room. Toggle for the session with s.
 # layout = "%s"
 
 # Editor for composing longer notes with ctrl+e.
-# Unset, crv uses $VISUAL, then $EDITOR, then vi.
+# Unset, krv uses $VISUAL, then $EDITOR, then vi.
 # editor = "hx"
 
-# Include untracked files when reviewing uncommitted work with "crv .".
+# Include untracked files when reviewing uncommitted work with "krv .".
 # On, because new files are usually the substance of generated-code review.
 # untracked = %t
 

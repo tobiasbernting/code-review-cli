@@ -96,7 +96,7 @@ type Theme struct {
 	DelFg string
 }
 
-// DefaultTheme is the dark preset, which is what crv shows when nothing has
+// DefaultTheme is the dark preset, which is what krv shows when nothing has
 // been configured.
 func DefaultTheme() Theme { return darkTheme() }
 
@@ -111,7 +111,7 @@ func ThemeNames() []string {
 }
 
 // ThemeByName returns a built-in preset. The second result is false for a
-// name crv does not know, which is how the config layer tells a theme name
+// name krv does not know, which is how the config layer tells a theme name
 // from a chroma style name.
 func ThemeByName(name string) (Theme, bool) {
 	build, ok := presets[strings.ToLower(strings.TrimSpace(name))]

@@ -5,8 +5,8 @@ package followup
 import (
 	"strings"
 
-	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
-	"github.com/tobiasbernting/code-review-cli/internal/ghsrc"
+	"github.com/tobiasbernting/krv/v2/internal/diffparse"
+	"github.com/tobiasbernting/krv/v2/internal/ghsrc"
 )
 
 type Session struct {

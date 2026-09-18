@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/tobiasbernting/code-review-cli/internal/config"
-	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
-	"github.com/tobiasbernting/code-review-cli/internal/notes"
-	"github.com/tobiasbernting/code-review-cli/internal/render"
+	"github.com/tobiasbernting/krv/v2/internal/config"
+	"github.com/tobiasbernting/krv/v2/internal/diffparse"
+	"github.com/tobiasbernting/krv/v2/internal/notes"
+	"github.com/tobiasbernting/krv/v2/internal/render"
 )
 
 // newTestReview is an in-memory review; Save is a no-op because the path is

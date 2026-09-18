@@ -8,32 +8,32 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/tobiasbernting/code-review-cli/internal/config"
-	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
-	"github.com/tobiasbernting/code-review-cli/internal/ghsrc"
-	"github.com/tobiasbernting/code-review-cli/internal/notes"
-	"github.com/tobiasbernting/code-review-cli/internal/render"
+	"github.com/tobiasbernting/krv/v2/internal/config"
+	"github.com/tobiasbernting/krv/v2/internal/diffparse"
+	"github.com/tobiasbernting/krv/v2/internal/ghsrc"
+	"github.com/tobiasbernting/krv/v2/internal/notes"
+	"github.com/tobiasbernting/krv/v2/internal/render"
 )
 
 // TestLiveSubmit posts a real review to a real pull request. It is skipped
-// unless CRV_LIVE_PR and CRV_LIVE_REPO are set, because it writes to GitHub.
+// unless KRV_LIVE_PR and KRV_LIVE_REPO are set, because it writes to GitHub.
 //
-//	CRV_LIVE_REPO=owner/name CRV_LIVE_PR=8 go test ./internal/tui -run Live -v
+//	KRV_LIVE_REPO=owner/name KRV_LIVE_PR=8 go test ./internal/tui -run Live -v
 //
 // It drives the model through the same keys a person would press, so what it
 // proves is the whole path — note taking, anchoring, and submission — rather
 // than the API call alone.
 func TestLiveSubmit(t *testing.T) {
-	repo, number := os.Getenv("CRV_LIVE_REPO"), os.Getenv("CRV_LIVE_PR")
+	repo, number := os.Getenv("KRV_LIVE_REPO"), os.Getenv("KRV_LIVE_PR")
 	if repo == "" || number == "" {
-		t.Skip("set CRV_LIVE_REPO and CRV_LIVE_PR to run against a real pull request")
+		t.Skip("set KRV_LIVE_REPO and KRV_LIVE_PR to run against a real pull request")
 	}
 	n, err := strconv.Atoi(number)
 	if err != nil {
-		t.Fatalf("CRV_LIVE_PR: %v", err)
+		t.Fatalf("KRV_LIVE_PR: %v", err)
 	}
 
-	client := ghsrc.Client{Dir: os.Getenv("CRV_LIVE_DIR")}
+	client := ghsrc.Client{Dir: os.Getenv("KRV_LIVE_DIR")}
 	if err := client.Preflight(); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestLiveSubmit(t *testing.T) {
 	if m.mode != modeInput {
 		t.Fatalf("could not open the note editor: %q", m.err)
 	}
-	m = typeText(t, m, "Posted by crv itself, proving the submit path end to end.")
+	m = typeText(t, m, "Posted by krv itself, proving the submit path end to end.")
 	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
 
@@ -102,7 +102,7 @@ func TestLiveSubmit(t *testing.T) {
 	if m.mode != modeSubmit {
 		t.Fatalf("submit screen refused to open: %q", m.err)
 	}
-	m.submit.body = "Automated end-to-end check of crv's review submission."
+	m.submit.body = "Automated end-to-end check of krv's review submission."
 
 	// Pressing enter returns the command that actually talks to GitHub.
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})

@@ -1,4 +1,4 @@
-// Command crv reviews diffs in the terminal.
+// Command krv reviews diffs in the terminal.
 package main
 
 import (
@@ -15,14 +15,14 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
-	"github.com/tobiasbernting/code-review-cli/internal/config"
-	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
-	"github.com/tobiasbernting/code-review-cli/internal/followup"
-	"github.com/tobiasbernting/code-review-cli/internal/ghsrc"
-	"github.com/tobiasbernting/code-review-cli/internal/gitsrc"
-	"github.com/tobiasbernting/code-review-cli/internal/notes"
-	"github.com/tobiasbernting/code-review-cli/internal/render"
-	"github.com/tobiasbernting/code-review-cli/internal/tui"
+	"github.com/tobiasbernting/krv/v2/internal/config"
+	"github.com/tobiasbernting/krv/v2/internal/diffparse"
+	"github.com/tobiasbernting/krv/v2/internal/followup"
+	"github.com/tobiasbernting/krv/v2/internal/ghsrc"
+	"github.com/tobiasbernting/krv/v2/internal/gitsrc"
+	"github.com/tobiasbernting/krv/v2/internal/notes"
+	"github.com/tobiasbernting/krv/v2/internal/render"
+	"github.com/tobiasbernting/krv/v2/internal/tui"
 )
 
 // Build metadata, injected by GoReleaser via -ldflags. A plain `go build` or
@@ -93,13 +93,13 @@ func usage() string {
 		notesDir = "(could not determine your config directory)"
 	}
 
-	return fmt.Sprintf(`crv — review code in the terminal
+	return fmt.Sprintf(`krv — review code in the terminal
 
 usage:
-  crv                the pull requests waiting on your review
-  crv .              review uncommitted work (including untracked files)
-  crv <range>        review a range, e.g. main...feature or HEAD~3..HEAD
-  crv <number>       review a pull request, e.g. crv 42
+  krv                the pull requests waiting on your review
+  krv .              review uncommitted work (including untracked files)
+  krv <range>        review a range, e.g. main...feature or HEAD~3..HEAD
+  krv <number>       review a pull request, e.g. krv 42
 
 flags:
   --host <name>      GitHub hostname (default: whatever gh is configured with)
@@ -117,12 +117,12 @@ flags:
   --version          print version and exit
 
 configuration:
-  Entirely optional — crv works with no configuration at all. Settings are
+  Entirely optional — krv works with no configuration at all. Settings are
   read from the following, and the first one that mentions a setting wins:
 
     1. the flags above
-    2. environment: CRV_HOST, CRV_THEME, CRV_SYNTAX, CRV_DENSITY,
-       CRV_LAYOUT, CRV_EDITOR, CRV_WIDTH, CRV_UNTRACKED, CRV_COLOR,
+    2. environment: KRV_HOST, KRV_THEME, KRV_SYNTAX, KRV_DENSITY,
+       KRV_LAYOUT, KRV_EDITOR, KRV_WIDTH, KRV_UNTRACKED, KRV_COLOR,
        NO_COLOR
     3. %s in the repository being reviewed
     4. %s
@@ -130,7 +130,7 @@ configuration:
   To create the user-level file, with every setting documented and
   commented out:
 
-    crv --init-config
+    krv --init-config
 
   Both files are TOML and every key is optional:
 
@@ -140,14 +140,14 @@ configuration:
     density = "comfortable"       # comfortable or compact
     layout = "unified"            # unified or split (split needs 140 columns)
     editor = "hx"                 # default: $VISUAL, then $EDITOR, then vi
-    untracked = true              # include untracked files in crv .
+    untracked = true              # include untracked files in krv .
     color = true
     width = 120                   # used when output is piped
 
   Set host in a repository's %s to review on an enterprise host
   without changing anything globally.
 
-  `+"`crv --config`"+` prints which settings are in effect and which files were
+  `+"`krv --config`"+` prints which settings are in effect and which files were
   read. Review notes are kept in:
     %s
 
@@ -156,7 +156,7 @@ configuration:
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "crv: "+err.Error())
+		fmt.Fprintln(os.Stderr, "krv: "+err.Error())
 		os.Exit(1)
 	}
 }
@@ -224,7 +224,7 @@ func applyFlags(fs *flag.FlagSet, o *options, cfg *config.Config) {
 }
 
 func run() error {
-	fs := flag.NewFlagSet("crv", flag.ExitOnError)
+	fs := flag.NewFlagSet("krv", flag.ExitOnError)
 	fs.Usage = func() { fmt.Fprint(os.Stderr, usage()) }
 	opts := registerFlags(fs)
 	if err := fs.Parse(os.Args[1:]); err != nil {
@@ -233,19 +233,20 @@ func run() error {
 
 	if opts.showVersion {
 		v, c, d := buildInfo()
-		fmt.Printf("crv %s (%s, built %s)\n", v, c, d)
+		fmt.Printf("krv %s (%s, built %s)\n", v, c, d)
 		return nil
+	}
+
+	// Earlier versions went by another name (see config.LegacyDirs), and
+	// before that kept everything under os.UserConfigDir. Move it once so saved notes survive the change of
+	// location — before --init-config, which would otherwise create the new
+	// directory and strand the old one.
+	if from, to, moved := config.Migrate(); moved {
+		fmt.Fprintf(os.Stderr, "krv: moved your notes and settings\n     from %s\n     to   %s\n", from, to)
 	}
 
 	if opts.initConfig {
 		return initConfig()
-	}
-
-	// Earlier versions stored everything under os.UserConfigDir, which on
-	// macOS is ~/Library/Application Support. Move it once so saved notes
-	// survive the change of location.
-	if from, to, moved := config.Migrate(); moved {
-		fmt.Fprintf(os.Stderr, "crv: moved your notes and settings\n     from %s\n     to   %s\n", from, to)
 	}
 
 	cwd, err := os.Getwd()
@@ -268,7 +269,7 @@ func run() error {
 		return printConfig(cfg, repo.Root)
 	}
 
-	// A bare `crv` opens the queue: it is the one invocation with no natural
+	// A bare `krv` opens the queue: it is the one invocation with no natural
 	// argument, and it is the thing that replaces opening github.com.
 	if fs.NArg() == 0 && opts.export == "" {
 		return runQueue(repo, cfg, opts.limit)
@@ -308,7 +309,7 @@ func start(repo *gitsrc.Repo, cfg config.Config, src tui.Source, files []*diffpa
 		return err
 	}
 	if o.SyncError != "" {
-		fmt.Fprintln(os.Stderr, "crv: "+o.SyncError)
+		fmt.Fprintln(os.Stderr, "krv: "+o.SyncError)
 	}
 
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
@@ -360,11 +361,11 @@ func reviewOptions(cfg config.Config, src tui.Source, files []*diffparse.FileDif
 func runQueue(repo *gitsrc.Repo, cfg config.Config, limit int) error {
 	client := ghsrc.Client{Host: cfg.Host, Dir: repo.Root}
 	if err := client.Preflight(); err != nil {
-		return fmt.Errorf("%w\n\nthe queue needs gh; local reviews (crv . and crv <range>) do not", err)
+		return fmt.Errorf("%w\n\nthe queue needs gh; local reviews (krv . and krv <range>) do not", err)
 	}
 
 	// Piped output gets the list as text: starting a full-screen program with
-	// no terminal would fail, and `crv | grep` is a reasonable thing to want.
+	// no terminal would fail, and `krv | grep` is a reasonable thing to want.
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
 		return printQueue(client, limit)
 	}
@@ -388,7 +389,7 @@ func printQueue(client ghsrc.Client, limit int) error {
 		return err
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "crv: "+err.Error()+" — showing the cached list")
+		fmt.Fprintln(os.Stderr, "krv: "+err.Error()+" — showing the cached list")
 	}
 	if len(items) == 0 {
 		fmt.Println("nothing waiting on your review")
@@ -455,7 +456,7 @@ func resolvePR(repo *gitsrc.Repo, cfg config.Config, number int) (tui.Source, []
 	client := ghsrc.Client{Host: cfg.Host, Dir: repo.Root}
 	if err := client.Preflight(); err != nil {
 		if errors.Is(err, ghsrc.ErrNotInstalled) {
-			return tui.Source{}, nil, fmt.Errorf("%w\n\nlocal reviews (crv . and crv <range>) work without it", err)
+			return tui.Source{}, nil, fmt.Errorf("%w\n\nlocal reviews (krv . and krv <range>) work without it", err)
 		}
 		return tui.Source{}, nil, err
 	}
@@ -491,7 +492,7 @@ func printExport(format string, review *notes.Review) error {
 	}
 	md := review.Markdown()
 	if md == "" {
-		fmt.Fprintln(os.Stderr, "crv: no notes for this review")
+		fmt.Fprintln(os.Stderr, "krv: no notes for this review")
 		return nil
 	}
 	_, err := os.Stdout.WriteString(md)
@@ -519,7 +520,7 @@ func printConfig(cfg config.Config, repoRoot string) error {
 	if s := cfg.Sources(); len(s) > 0 {
 		fmt.Printf("loaded     %s\n", strings.Join(s, ", "))
 	} else {
-		fmt.Printf("loaded     (none — all defaults; crv --help shows how to create one)\n")
+		fmt.Printf("loaded     (none — all defaults; krv --help shows how to create one)\n")
 	}
 	dir, _ := notes.Dir()
 	fmt.Printf("notes      %s\n", dir)
@@ -527,9 +528,9 @@ func printConfig(cfg config.Config, repoRoot string) error {
 }
 
 // presentation resolves the configured names into the theme and layout the
-// renderer works in. A theme name that is not one of crv's own but is a chroma
+// renderer works in. A theme name that is not one of krv's own but is a chroma
 // style is taken as a syntax style over the dark theme: that is what the
-// setting meant before crv had themes, and a configuration file that used to
+// setting meant before krv had themes, and a configuration file that used to
 // work should keep working.
 func presentation(cfg config.Config) (render.Theme, render.Layout, error) {
 	th, ok := render.ThemeByName(cfg.Theme)
@@ -582,7 +583,7 @@ func initConfig() error {
 	}
 	fmt.Printf("wrote %s\n\n", path)
 	fmt.Println("every setting is commented out, so nothing is overridden until you")
-	fmt.Println("uncomment it — crv keeps using its own defaults, including if they change.")
+	fmt.Println("uncomment it — krv keeps using its own defaults, including if they change.")
 	return nil
 }
 
@@ -603,7 +604,7 @@ func orDefault(v, fallback string) string {
 }
 
 // printPlain is the non-TTY path: same rows, printed once and exited, so
-// `crv . | less` and `crv . > review.txt` work.
+// `krv . | less` and `krv . > review.txt` work.
 func printPlain(files []*diffparse.FileDiff, th render.Theme, layout render.Layout, cfg config.Config, ov render.Overlay) error {
 	width := cfg.Width
 	if width <= 0 {

@@ -1,4 +1,4 @@
-module github.com/tobiasbernting/code-review-cli
+module github.com/tobiasbernting/krv/v2
 
 go 1.27.1
 

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/tobiasbernting/code-review-cli/internal/config"
+	"github.com/tobiasbernting/krv/v2/internal/config"
 )
 
 // Filter selects which pull requests the queue shows.

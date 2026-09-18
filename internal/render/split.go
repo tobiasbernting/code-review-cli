@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
+	"github.com/tobiasbernting/krv/v2/internal/diffparse"
 )
 
 // Split layout puts the old file on the left and the new one on the right:

@@ -26,7 +26,7 @@ func TestDirPrefersDotConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := filepath.Join(home, ".config", "crv"); got != want {
+	if want := filepath.Join(home, ".config", "krv"); got != want {
 		t.Errorf("Dir = %q, want %q", got, want)
 	}
 }
@@ -38,7 +38,7 @@ func TestDirHonoursXDG(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := filepath.Join("/somewhere/xdg", "crv"); got != want {
+	if want := filepath.Join("/somewhere/xdg", "krv"); got != want {
 		t.Errorf("Dir = %q, want %q", got, want)
 	}
 }
@@ -129,20 +129,50 @@ func TestMigrateDoesNothingWithoutLegacyDirectory(t *testing.T) {
 	}
 }
 
-// When the two paths coincide — Linux, or XDG pointing at the same place —
-// there is nothing to do and certainly nothing to rename onto itself.
-func TestMigrateNoopWhenPathsMatch(t *testing.T) {
+// The rename from crv: ~/.config/crv becomes ~/.config/krv.
+func TestMigrateMovesOldNameBesideDir(t *testing.T) {
 	home := useHome(t)
-	same := filepath.Join(home, "same")
-	t.Setenv("XDG_CONFIG_HOME", same)
 	old := userConfigDir
-	userConfigDir = func() (string, error) { return same, nil }
+	userConfigDir = func() (string, error) { return filepath.Join(home, "Legacy"), nil }
 	t.Cleanup(func() { userConfigDir = old })
 
-	if err := os.MkdirAll(filepath.Join(same, "crv"), 0o700); err != nil {
+	dir, _ := Dir()
+	legacy := filepath.Join(filepath.Dir(dir), "crv")
+	if err := os.MkdirAll(legacy, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, moved := Migrate(); moved {
-		t.Error("migrated a directory onto itself")
+
+	from, to, moved := Migrate()
+	if !moved {
+		t.Fatal("nothing was migrated")
+	}
+	if from != legacy || to != dir {
+		t.Errorf("moved %q to %q, want %q to %q", from, to, legacy, dir)
+	}
+}
+
+// With both legacy directories present, the more recent one wins and the
+// older one is left alone rather than merged.
+func TestMigratePrefersMostRecentLegacyDirectory(t *testing.T) {
+	home := useHome(t)
+	old := userConfigDir
+	userConfigDir = func() (string, error) { return filepath.Join(home, "Legacy"), nil }
+	t.Cleanup(func() { userConfigDir = old })
+
+	dir, _ := Dir()
+	recent := filepath.Join(filepath.Dir(dir), "crv")
+	older := filepath.Join(home, "Legacy", "crv")
+	for _, d := range []string{recent, older} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	from, _, moved := Migrate()
+	if !moved || from != recent {
+		t.Errorf("moved from %q (moved=%v), want %q", from, moved, recent)
+	}
+	if _, err := os.Stat(older); err != nil {
+		t.Errorf("the older legacy directory was disturbed: %v", err)
 	}
 }

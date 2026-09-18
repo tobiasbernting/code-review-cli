@@ -1,8 +1,8 @@
 package followup
 
 import (
-	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
-	"github.com/tobiasbernting/code-review-cli/internal/ghsrc"
+	"github.com/tobiasbernting/krv/v2/internal/diffparse"
+	"github.com/tobiasbernting/krv/v2/internal/ghsrc"
 	"strings"
 	"testing"
 )

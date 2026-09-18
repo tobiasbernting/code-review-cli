@@ -8,19 +8,19 @@ import (
 )
 
 // useConfigDir points the configuration directory at a temporary location
-// and returns the crv subdirectory inside it.
+// and returns the krv subdirectory inside it.
 func useConfigDir(t *testing.T) string {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	crv, err := Dir()
+	krv, err := Dir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(crv, 0o700); err != nil {
+	if err := os.MkdirAll(krv, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	return crv
+	return krv
 }
 
 func write(t *testing.T, dir, name, body string) string {
@@ -87,7 +87,7 @@ func TestEnvOverridesFiles(t *testing.T) {
 	useConfigDir(t)
 	repo := t.TempDir()
 	write(t, repo, RepoFile, "host = \"from-file\"\nwidth = 100\n")
-	t.Setenv("CRV_HOST", "from-env")
+	t.Setenv("KRV_HOST", "from-env")
 
 	cfg, err := Load(repo)
 	if err != nil {
@@ -129,14 +129,14 @@ func TestUnknownSettingIsAnError(t *testing.T) {
 
 func TestBadEnvValueIsAnError(t *testing.T) {
 	useConfigDir(t)
-	t.Setenv("CRV_WIDTH", "wide")
+	t.Setenv("KRV_WIDTH", "wide")
 	if _, err := Load(""); err == nil {
-		t.Error("expected an error for a non-numeric CRV_WIDTH")
+		t.Error("expected an error for a non-numeric KRV_WIDTH")
 	}
 }
 
 // layout goes through every layer like any other setting: the user file,
-// then the repository file, then CRV_LAYOUT. (Flags are applied by cmd/crv.)
+// then the repository file, then KRV_LAYOUT. (Flags are applied by cmd/krv.)
 func TestLayoutPrecedence(t *testing.T) {
 	user := useConfigDir(t)
 	repo := t.TempDir()
@@ -165,12 +165,12 @@ func TestLayoutPrecedence(t *testing.T) {
 		t.Errorf("layout = %q, want unified from the repository file", cfg.Layout)
 	}
 
-	t.Setenv("CRV_LAYOUT", "split")
+	t.Setenv("KRV_LAYOUT", "split")
 	if cfg, err = Load(repo); err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Layout != "split" {
-		t.Errorf("layout = %q, want split from CRV_LAYOUT", cfg.Layout)
+		t.Errorf("layout = %q, want split from KRV_LAYOUT", cfg.Layout)
 	}
 }
 

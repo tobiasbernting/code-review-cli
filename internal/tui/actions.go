@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/tobiasbernting/code-review-cli/internal/notes"
-	"github.com/tobiasbernting/code-review-cli/internal/render"
+	"github.com/tobiasbernting/krv/v2/internal/notes"
+	"github.com/tobiasbernting/krv/v2/internal/render"
 )
 
 // cursorLine is the file, new-side line and hunk the cursor sits on, or
@@ -237,7 +237,7 @@ type editorFinishedMsg struct {
 // openEditor hands the terminal to $EDITOR with the current text, prefilled
 // with the target lines as a comment for context.
 func (m Model) openEditor(body string) tea.Cmd {
-	file, err := os.CreateTemp("", "crv-note-*.md")
+	file, err := os.CreateTemp("", "krv-note-*.md")
 	if err != nil {
 		return func() tea.Msg { return editorFinishedMsg{err: err} }
 	}

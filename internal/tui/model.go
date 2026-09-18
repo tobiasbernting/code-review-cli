@@ -9,11 +9,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
-	"github.com/tobiasbernting/code-review-cli/internal/config"
-	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
-	"github.com/tobiasbernting/code-review-cli/internal/ghsrc"
-	"github.com/tobiasbernting/code-review-cli/internal/notes"
-	"github.com/tobiasbernting/code-review-cli/internal/render"
+	"github.com/tobiasbernting/krv/v2/internal/config"
+	"github.com/tobiasbernting/krv/v2/internal/diffparse"
+	"github.com/tobiasbernting/krv/v2/internal/ghsrc"
+	"github.com/tobiasbernting/krv/v2/internal/notes"
+	"github.com/tobiasbernting/krv/v2/internal/render"
 )
 
 type mode int
@@ -825,7 +825,7 @@ func (m Model) helpView() string {
 
 	var b strings.Builder
 	b.WriteString(blank + "\n")
-	b.WriteString(surface.Bold(true).Render(pad("  crv — keys", m.width)) + "\n" + blank + "\n")
+	b.WriteString(surface.Bold(true).Render(pad("  krv — keys", m.width)) + "\n" + blank + "\n")
 	for _, r := range rows {
 		if r[0] == "" {
 			b.WriteString(blank + "\n")

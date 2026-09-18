@@ -1,15 +1,15 @@
-# Release build for crv. Run `goreleaser check` after editing.
+# Release build for krv. Run `goreleaser check` after editing.
 version: 2
-project_name: crv
+project_name: krv
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: crv
-    main: ./cmd/crv
-    binary: crv
+  - id: krv
+    main: ./cmd/krv
+    binary: krv
     env:
       - CGO_ENABLED=0
     goos: [darwin, linux, windows]
@@ -23,7 +23,7 @@ builds:
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
-  - id: crv
+  - id: krv
     formats: [tar.gz]
     format_overrides:
       - goos: windows
@@ -59,8 +59,8 @@ release:
   footer: |
     ## Install
 
-    Download the archive for your platform below, unpack it, and put `crv`
+    Download the archive for your platform below, unpack it, and put `krv`
     somewhere on your `PATH`. Verify it against `checksums.txt` first if you
     care to.
 
-    Or build from source: `go install github.com/tobiasbernting/code-review-cli/cmd/crv@latest`
+    Or build from source: `go install github.com/tobiasbernting/krv/v2/cmd/krv@latest`

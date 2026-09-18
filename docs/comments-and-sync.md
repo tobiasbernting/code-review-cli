@@ -1,11 +1,11 @@
 # Comments and sync
 
-This document defines how `crv` distinguishes local drafts, remote discussion
+This document defines how `krv` distinguishes local drafts, remote discussion
 state, and the age of the displayed pull request snapshot.
 
 ## Terms
 
-- A **draft** is an unsent local review note owned by `crv`.
+- A **draft** is an unsent local review note owned by `krv`.
 - **Needs re-anchor** means a draft's file blob or path no longer matches the
   current diff. Its saved line coordinates cannot be trusted.
 - A **thread** is a GitHub review discussion: one root comment and its replies.
@@ -64,7 +64,7 @@ as explicit warnings alongside the coherent diff and threads.
 
 The paginated REST feed supplies every comment and reply; GitHub GraphQL adds
 thread resolution and authoritative outdated state. If those GraphQL fields
-are unavailable, `crv` keeps the REST grouping and marks resolution as
+are unavailable, `krv` keeps the REST grouping and marks resolution as
 unavailable.
 
 ## New activity

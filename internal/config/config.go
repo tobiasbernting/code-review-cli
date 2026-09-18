@@ -1,7 +1,7 @@
-// Package config resolves crv's settings.
+// Package config resolves krv's settings.
 //
-// Precedence, highest first: command-line flags, CRV_* environment
-// variables, a per-repository .crv.toml, the user's config.toml, built-in
+// Precedence, highest first: command-line flags, KRV_* environment
+// variables, a per-repository .krv.toml, the user's config.toml, built-in
 // defaults. Host is deliberately empty by default so that gh's own configured
 // host wins — switching between a personal account and an enterprise one is a
 // repository-local file rather than global state you forget you set.
@@ -19,7 +19,7 @@ import (
 
 const (
 	// RepoFile is looked for at the root of the repository being reviewed.
-	RepoFile = ".crv.toml"
+	RepoFile = ".krv.toml"
 	// UserFile lives beside the stored reviews.
 	UserFile = "config.toml"
 )
@@ -29,8 +29,8 @@ type Config struct {
 	// Empty means "whatever gh is configured to use".
 	Host string `toml:"host"`
 
-	// Theme names a crv colour theme: dark, light or high-contrast. A chroma
-	// style name is also accepted, for configurations written before crv had
+	// Theme names a krv colour theme: dark, light or high-contrast. A chroma
+	// style name is also accepted, for configurations written before krv had
 	// themes of its own.
 	Theme string `toml:"theme"`
 
@@ -55,7 +55,7 @@ type Config struct {
 	// Color enables syntax highlighting and diff colours.
 	Color bool `toml:"color"`
 
-	// sources records where the settings came from, for `crv --config`.
+	// sources records where the settings came from, for `krv --config`.
 	sources []string
 }
 
@@ -158,35 +158,35 @@ func mergeFile(cfg *Config, path string) error {
 }
 
 func mergeEnv(cfg *Config) error {
-	if v, ok := os.LookupEnv("CRV_HOST"); ok {
+	if v, ok := os.LookupEnv("KRV_HOST"); ok {
 		cfg.Host = v
 	}
-	if v, ok := os.LookupEnv("CRV_THEME"); ok {
+	if v, ok := os.LookupEnv("KRV_THEME"); ok {
 		cfg.Theme = v
 	}
-	if v, ok := os.LookupEnv("CRV_SYNTAX"); ok {
+	if v, ok := os.LookupEnv("KRV_SYNTAX"); ok {
 		cfg.Syntax = v
 	}
-	if v, ok := os.LookupEnv("CRV_DENSITY"); ok {
+	if v, ok := os.LookupEnv("KRV_DENSITY"); ok {
 		cfg.Density = v
 	}
-	if v, ok := os.LookupEnv("CRV_LAYOUT"); ok {
+	if v, ok := os.LookupEnv("KRV_LAYOUT"); ok {
 		cfg.Layout = v
 	}
-	if v, ok := os.LookupEnv("CRV_EDITOR"); ok {
+	if v, ok := os.LookupEnv("KRV_EDITOR"); ok {
 		cfg.Editor = v
 	}
-	if v, ok := os.LookupEnv("CRV_WIDTH"); ok {
+	if v, ok := os.LookupEnv("KRV_WIDTH"); ok {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return fmt.Errorf("CRV_WIDTH: %w", err)
+			return fmt.Errorf("KRV_WIDTH: %w", err)
 		}
 		cfg.Width = n
 	}
-	if v, ok := os.LookupEnv("CRV_UNTRACKED"); ok {
+	if v, ok := os.LookupEnv("KRV_UNTRACKED"); ok {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
-			return fmt.Errorf("CRV_UNTRACKED: %w", err)
+			return fmt.Errorf("KRV_UNTRACKED: %w", err)
 		}
 		cfg.Untracked = b
 	}
@@ -195,10 +195,10 @@ func mergeEnv(cfg *Config) error {
 	if _, ok := os.LookupEnv("NO_COLOR"); ok {
 		cfg.Color = false
 	}
-	if v, ok := os.LookupEnv("CRV_COLOR"); ok {
+	if v, ok := os.LookupEnv("KRV_COLOR"); ok {
 		b, err := strconv.ParseBool(v)
 		if err != nil {
-			return fmt.Errorf("CRV_COLOR: %w", err)
+			return fmt.Errorf("KRV_COLOR: %w", err)
 		}
 		cfg.Color = b
 	}
