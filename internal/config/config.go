@@ -40,6 +40,9 @@ type Config struct {
 	// Density is "comfortable" or "compact".
 	Density string `toml:"density"`
 
+	// Layout is "unified" or "split".
+	Layout string `toml:"layout"`
+
 	// Editor overrides $EDITOR for composing longer notes.
 	Editor string `toml:"editor"`
 
@@ -60,6 +63,7 @@ func Defaults() Config {
 	return Config{
 		Theme:     "dark",
 		Density:   "comfortable",
+		Layout:    "unified",
 		Untracked: true,
 		Width:     120,
 		Color:     true,
@@ -132,6 +136,8 @@ func mergeFile(cfg *Config, path string) error {
 			cfg.Syntax = file.Syntax
 		case "density":
 			cfg.Density = file.Density
+		case "layout":
+			cfg.Layout = file.Layout
 		case "editor":
 			cfg.Editor = file.Editor
 		case "untracked":
@@ -163,6 +169,9 @@ func mergeEnv(cfg *Config) error {
 	}
 	if v, ok := os.LookupEnv("CRV_DENSITY"); ok {
 		cfg.Density = v
+	}
+	if v, ok := os.LookupEnv("CRV_LAYOUT"); ok {
+		cfg.Layout = v
 	}
 	if v, ok := os.LookupEnv("CRV_EDITOR"); ok {
 		cfg.Editor = v

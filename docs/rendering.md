@@ -83,6 +83,50 @@ replaced the tint would answer "where am I?" by erasing "what is this?".
 | `RowNote` | an annotation — one line away from the cursor, expanded under it |
 | `RowSection` | heads a group of annotations that no longer anchor to a line |
 | `RowSpacer` | blank; navigation skips it |
+| `RowPair` | split layout only: an old line and a new line side by side (below) |
+
+## Split layout
+
+`Layout.Mode == ModeSplit` puts the old file on the left and the new one on
+the right. `Build` does not know the terminal's width, so callers pass a layout
+already run through `Layout.Fit(width)`, which falls back to unified below
+`SplitMinWidth` (140). Unified output is untouched by any of this.
+
+```
+▎  13 − if err := s.authorize(ctx, r)… │▎  13 + if err := s.authorise(ctx, r, s.policy)…
+│   │  │ │                              ││
+│   │  │ └─ code                        │└─ the right pane's own edge marker
+│   │  └─── sign                        └── the rule between the panes
+│   └────── old-side line number
+└────────── edge: the left pane's marker, or the focus bar on the cursor row
+```
+
+Every hunk line becomes a `RowPair`: `Line`/`Segs`/`Marks` are the left side,
+`Right`/`RightSegs`/`RightMarks` the right. Pairing is GitHub's: a context line
+sits on both sides of one row, and in each change block (deletions, then the
+additions straight after) the i-th deleted line shares a row with the i-th
+added line. The shorter side is filler — a side whose own line number
+(`Line.OldNum`, `Right.NewNum`) is zero — painted blank in `FillBg`.
+`changeBlocks` is the one pairing both this and `markHunk` use, so word marks
+always sit on the row showing the line they were compared against.
+
+The two panes are the same width and the same anatomy, each a unified row with
+one number column (`paneNumWidth`, shared so the code starts at the same offset
+in both). Each pane states add/delete with its own marker, sign and tint, so
+the no-colour rule holds per pane (`TestSplitAddAndDeleteReadWithoutColour`).
+Focus lifts both panes and takes the far-left edge; the right pane keeps its
+marker. One `hoffset` scrolls both panes, and each marks its own overflow.
+
+File, meta, section and spacer rows stay full width. A hunk header puts the old
+range over the left pane — followed by the section — and the new range over
+the right. Annotations stay full width under the pair row, anchored by the
+right side's new line number, so a row whose right side is filler has none —
+exactly as a deleted line has none in unified. `GutterWidth()` is the left
+pane's gutter in split, which is where annotations indent to.
+
+`Document.LineRow(fileIdx, newNum, oldNum)` finds the row showing a line in
+either mode — new-side number first, old-side as the fallback — which is how a
+view keeps its cursor on the same line across a mode switch.
 
 ## Themes
 
@@ -97,7 +141,7 @@ still read those.
 | --- | --- | --- |
 | surface | `Bg` `Fg` `Dim` `Accent` | the page behind unchanged code, and text with no colour of its own |
 | gutter | `GutterBg` `GutterSep` `LineNumFg` `LineNumFocusFg` | the number columns and the rule between them |
-| diff | `AddBg` `AddBgFocus` `AddEdge` `AddSign` `AddWordBg` (and `Del*`) | the tint, the marker, the sign, intra-line changes |
+| diff | `AddBg` `AddBgFocus` `AddEdge` `AddSign` `AddWordBg` (and `Del*`), `FillBg` | the tint, the marker, the sign, intra-line changes; the empty side of a split row |
 | focus | `CursorBg` `CursorBar` | a focused context row and the bar itself |
 | headers | `FileBg` `FileFg` `HunkBg` `HunkFg` `MetaFg` | file and hunk bands |
 | annotations | `NoteBg` `NoteFg` `NoteBodyFg` `CommentFg` `StaleFg` | panel, label, body, and who is speaking |
@@ -194,6 +238,7 @@ goldens stay readable diffs of *layout* rather than walls of escape codes:
 | `testdata/basic-compact.golden` | the same diff with density off |
 | `testdata/dense.golden` | rename, mode change, word diffs, over-wide lines, a conversation with state badges, a focused row |
 | `testdata/dense-compact.golden` | the same, compact |
+| `testdata/basic-split.golden` / `dense-split.golden` | the same diffs in split at width 160: pairing, filler, per-pane markers and overflow |
 
 Colour is tested where colour lives: `theme_test.go` checks role completeness,
 the aliases, that light and dark disagree about which end of the scale text
@@ -205,7 +250,8 @@ rather than relying on shading.
 
 `TestWritePreviewSVG` renders `testdata/dense.diff` through the real renderer
 at 24-bit colour — annotations expanded, as the plain-text path prints them —
-and writes one SVG per theme to `docs/img/`. It is a test
+and writes one SVG per theme to `docs/img/`, plus `layout-split.svg` for the
+split layout at 160 columns. It is a test
 because that is where the renderer, the fixture and the overlay already live,
 and it is skipped unless `-preview` is passed. SVG rather than a terminal
 capture: diffable in review, no font needed on the reader's machine, and the

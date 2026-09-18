@@ -106,6 +106,7 @@ flags:
   --theme <name>     colour theme: dark, light, high-contrast
   --syntax <name>    chroma style for code, overriding the theme's own
   --density <name>   row density: comfortable or compact
+  --layout <name>    diff layout: unified or split
   --no-color         disable colour (also honours NO_COLOR)
   --no-untracked     exclude untracked files from the working-tree diff
   --width <n>        output width when not attached to a terminal
@@ -121,7 +122,8 @@ configuration:
 
     1. the flags above
     2. environment: CRV_HOST, CRV_THEME, CRV_SYNTAX, CRV_DENSITY,
-       CRV_EDITOR, CRV_WIDTH, CRV_UNTRACKED, CRV_COLOR, NO_COLOR
+       CRV_LAYOUT, CRV_EDITOR, CRV_WIDTH, CRV_UNTRACKED, CRV_COLOR,
+       NO_COLOR
     3. %s in the repository being reviewed
     4. %s
 
@@ -136,6 +138,7 @@ configuration:
     theme = "dark"                # dark, light or high-contrast
     syntax = "catppuccin-mocha"   # any chroma style name
     density = "comfortable"       # comfortable or compact
+    layout = "unified"            # unified or split (split needs 140 columns)
     editor = "hx"                 # default: $VISUAL, then $EDITOR, then vi
     untracked = true              # include untracked files in crv .
     color = true
@@ -166,6 +169,7 @@ type options struct {
 	theme       string
 	syntax      string
 	density     string
+	layout      string
 	export      string
 	noColor     bool
 	noUntracked bool
@@ -182,6 +186,7 @@ func registerFlags(fs *flag.FlagSet) *options {
 	fs.StringVar(&o.theme, "theme", "", "colour theme: dark, light, high-contrast")
 	fs.StringVar(&o.syntax, "syntax", "", "chroma style for code")
 	fs.StringVar(&o.density, "density", "", "row density: comfortable or compact")
+	fs.StringVar(&o.layout, "layout", "", "diff layout: unified or split")
 	fs.StringVar(&o.export, "export", "", "print saved notes: markdown")
 	fs.BoolVar(&o.noColor, "no-color", false, "disable colour")
 	fs.BoolVar(&o.noUntracked, "no-untracked", false, "exclude untracked files")
@@ -191,6 +196,31 @@ func registerFlags(fs *flag.FlagSet) *options {
 	fs.IntVar(&o.width, "width", 0, "output width when not a terminal")
 	fs.IntVar(&o.limit, "limit", 30, "how many pull requests the queue lists")
 	return &o
+}
+
+// applyFlags lays the flags that were actually set over the loaded
+// configuration.
+func applyFlags(fs *flag.FlagSet, o *options, cfg *config.Config) {
+	fs.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "host":
+			cfg.Host = o.host
+		case "theme":
+			cfg.Theme = o.theme
+		case "syntax":
+			cfg.Syntax = o.syntax
+		case "density":
+			cfg.Density = o.density
+		case "layout":
+			cfg.Layout = o.layout
+		case "no-color":
+			cfg.Color = !o.noColor
+		case "no-untracked":
+			cfg.Untracked = !o.noUntracked
+		case "width":
+			cfg.Width = o.width
+		}
+	})
 }
 
 func run() error {
@@ -232,24 +262,7 @@ func run() error {
 		return err
 	}
 	// Flags are applied last: only here is it known which were actually set.
-	fs.Visit(func(f *flag.Flag) {
-		switch f.Name {
-		case "host":
-			cfg.Host = opts.host
-		case "theme":
-			cfg.Theme = opts.theme
-		case "syntax":
-			cfg.Syntax = opts.syntax
-		case "density":
-			cfg.Density = opts.density
-		case "no-color":
-			cfg.Color = !opts.noColor
-		case "no-untracked":
-			cfg.Untracked = !opts.noUntracked
-		case "width":
-			cfg.Width = opts.width
-		}
-	})
+	applyFlags(fs, opts, &cfg)
 
 	if opts.showConfig {
 		return printConfig(cfg, repo.Root)
@@ -483,6 +496,7 @@ func printConfig(cfg config.Config, repoRoot string) error {
 	}
 	fmt.Printf("syntax     %s%s\n", th.Syntax, source(cfg.Syntax != "", "the theme's own"))
 	fmt.Printf("density    %s\n", layout.Density)
+	fmt.Printf("layout     %s\n", layout.Mode)
 	fmt.Printf("editor     %s\n", cfg.EditorCommand())
 	fmt.Printf("untracked  %t\n", cfg.Untracked)
 	fmt.Printf("color      %t\n", cfg.Color)
@@ -528,7 +542,11 @@ func presentation(cfg config.Config) (render.Theme, render.Layout, error) {
 	if !ok {
 		return th, render.Layout{}, fmt.Errorf("unknown density %q — use comfortable or compact", cfg.Density)
 	}
-	return th, render.Layout{Density: density}, nil
+	mode, ok := render.ParseMode(cfg.Layout)
+	if !ok {
+		return th, render.Layout{}, fmt.Errorf("unknown layout %q — use unified or split", cfg.Layout)
+	}
+	return th, render.Layout{Density: density, Mode: mode}, nil
 }
 
 // source annotates a resolved value that the user did not set themselves.
@@ -579,6 +597,9 @@ func printPlain(files []*diffparse.FileDiff, th render.Theme, layout render.Layo
 	if width <= 0 {
 		width = 120
 	}
+	// Piped output has a fixed width, so a split layout that would not fit
+	// quietly becomes unified rather than printing unreadable panes.
+	layout = layout.Fit(width)
 	doc := render.Build(files, render.NewHighlighter(th.Syntax, cfg.Color), ov, layout)
 	r := render.NewRenderer(th, doc)
 

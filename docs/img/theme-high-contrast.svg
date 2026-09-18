@@ -1,12 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="868" height="921" viewBox="0 0 868 921" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, &#39;DejaVu Sans Mono&#39;, monospace" font-size="14">
 <rect width="868" height="921" rx="6" fill="#000000"/>
-<rect x="14.00" y="14.00" width="25.20" height="19.00" fill="#1c1c1c"/>
+<rect x="14.00" y="14.00" width="8.40" height="19.00" fill="#1c1c1c"/>
+<rect x="22.40" y="14.00" width="16.80" height="19.00" fill="#1c1c1c"/>
 <rect x="39.20" y="14.00" width="218.40" height="19.00" fill="#1c1c1c"/>
 <text x="39.20" y="27.50" fill="#ffffff" textLength="218.40" lengthAdjust="spacingAndGlyphs" font-weight="600" xml:space="preserve">internal/server/handler.go</text>
 <rect x="257.60" y="14.00" width="546.00" height="19.00" fill="#1c1c1c"/>
 <rect x="803.60" y="14.00" width="50.40" height="19.00" fill="#1c1c1c"/>
 <text x="803.60" y="27.50" fill="#c0c0c0" textLength="50.40" lengthAdjust="spacingAndGlyphs" xml:space="preserve">+7 −2 </text>
-<rect x="14.00" y="33.00" width="25.20" height="19.00" fill="#000000"/>
+<rect x="14.00" y="33.00" width="8.40" height="19.00" fill="#000000"/>
+<rect x="22.40" y="33.00" width="16.80" height="19.00" fill="#000000"/>
 <rect x="39.20" y="33.00" width="151.20" height="19.00" fill="#000000"/>
 <text x="39.20" y="46.50" fill="#c0c0c0" textLength="151.20" lengthAdjust="spacingAndGlyphs" font-weight="600" xml:space="preserve">no longer anchored</text>
 <rect x="190.40" y="33.00" width="663.60" height="19.00" fill="#000000"/>
@@ -18,7 +20,8 @@
 <rect x="266.00" y="52.00" width="336.00" height="19.00" fill="#141414"/>
 <text x="266.00" y="65.50" fill="#a8a8a8" textLength="336.00" lengthAdjust="spacingAndGlyphs" xml:space="preserve">This whole helper moved in the meantime.</text>
 <rect x="602.00" y="52.00" width="252.00" height="19.00" fill="#141414"/>
-<rect x="14.00" y="71.00" width="16.80" height="19.00" fill="#101010"/>
+<rect x="14.00" y="71.00" width="8.40" height="19.00" fill="#101010"/>
+<rect x="22.40" y="71.00" width="8.40" height="19.00" fill="#101010"/>
 <rect x="30.80" y="71.00" width="25.20" height="19.00" fill="#101010"/>
 <text x="30.80" y="84.50" fill="#c0c0c0" textLength="25.20" lengthAdjust="spacingAndGlyphs" xml:space="preserve">old</text>
 <rect x="56.00" y="71.00" width="25.20" height="19.00" fill="#101010"/>
@@ -258,6 +261,7 @@
 <rect x="173.60" y="223.00" width="445.20" height="19.00" fill="#141414"/>
 <text x="173.60" y="236.50" fill="#f2f2f2" textLength="445.20" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Check the policy argument is not nil before the call.</text>
 <rect x="618.80" y="223.00" width="235.20" height="19.00" fill="#141414"/>
+<rect x="14.00" y="242.00" width="840.00" height="19.00" fill="#000000"/>
 <rect x="14.00" y="261.00" width="8.40" height="19.00" fill="#0b0b0b"/>
 <rect x="22.40" y="261.00" width="33.60" height="19.00" fill="#0b0b0b"/>
 <text x="22.40" y="274.50" fill="#a8a8a8" textLength="33.60" lengthAdjust="spacingAndGlyphs" xml:space="preserve">  14</text>
@@ -312,7 +316,9 @@
 <rect x="165.20" y="299.00" width="8.40" height="19.00" fill="#000000"/>
 <text x="165.20" y="312.50" fill="#cad1d6" textLength="8.40" lengthAdjust="spacingAndGlyphs" xml:space="preserve">}</text>
 <rect x="173.60" y="299.00" width="680.40" height="19.00" fill="#000000"/>
-<rect x="14.00" y="337.00" width="16.80" height="19.00" fill="#101010"/>
+<rect x="14.00" y="318.00" width="840.00" height="19.00" fill="#000000"/>
+<rect x="14.00" y="337.00" width="8.40" height="19.00" fill="#101010"/>
+<rect x="22.40" y="337.00" width="8.40" height="19.00" fill="#101010"/>
 <rect x="30.80" y="337.00" width="25.20" height="19.00" fill="#101010"/>
 <text x="30.80" y="350.50" fill="#c0c0c0" textLength="25.20" lengthAdjust="spacingAndGlyphs" xml:space="preserve">old</text>
 <rect x="56.00" y="337.00" width="25.20" height="19.00" fill="#101010"/>
@@ -649,22 +655,27 @@
 <rect x="165.20" y="584.00" width="8.40" height="19.00" fill="#000000"/>
 <text x="165.20" y="597.50" fill="#cad1d6" textLength="8.40" lengthAdjust="spacingAndGlyphs" xml:space="preserve">}</text>
 <rect x="173.60" y="584.00" width="680.40" height="19.00" fill="#000000"/>
-<rect x="14.00" y="622.00" width="25.20" height="19.00" fill="#1c1c1c"/>
-<text x="14.00" y="635.50" fill="#ffd300" textLength="25.20" lengthAdjust="spacingAndGlyphs" font-weight="600" xml:space="preserve"> ~ </text>
+<rect x="14.00" y="603.00" width="840.00" height="19.00" fill="#000000"/>
+<rect x="14.00" y="622.00" width="8.40" height="19.00" fill="#1c1c1c"/>
+<rect x="22.40" y="622.00" width="16.80" height="19.00" fill="#1c1c1c"/>
+<text x="22.40" y="635.50" fill="#ffd300" textLength="16.80" lengthAdjust="spacingAndGlyphs" font-weight="600" xml:space="preserve">~ </text>
 <rect x="39.20" y="622.00" width="210.00" height="19.00" fill="#1c1c1c"/>
 <text x="39.20" y="635.50" fill="#ffffff" textLength="210.00" lengthAdjust="spacingAndGlyphs" font-weight="600" xml:space="preserve">internal/server/policy.go</text>
 <rect x="249.20" y="622.00" width="352.80" height="19.00" fill="#1c1c1c"/>
 <rect x="602.00" y="622.00" width="252.00" height="19.00" fill="#1c1c1c"/>
 <text x="602.00" y="635.50" fill="#c0c0c0" textLength="252.00" lengthAdjust="spacingAndGlyphs" xml:space="preserve">changed since reviewed  +2 −2 </text>
-<rect x="14.00" y="641.00" width="25.20" height="19.00" fill="#000000"/>
+<rect x="14.00" y="641.00" width="8.40" height="19.00" fill="#000000"/>
+<rect x="22.40" y="641.00" width="16.80" height="19.00" fill="#000000"/>
 <rect x="39.20" y="641.00" width="310.80" height="19.00" fill="#000000"/>
 <text x="39.20" y="654.50" fill="#c0c0c0" textLength="310.80" lengthAdjust="spacingAndGlyphs" xml:space="preserve">renamed from internal/server/rules.go</text>
 <rect x="350.00" y="641.00" width="504.00" height="19.00" fill="#000000"/>
-<rect x="14.00" y="660.00" width="25.20" height="19.00" fill="#000000"/>
+<rect x="14.00" y="660.00" width="8.40" height="19.00" fill="#000000"/>
+<rect x="22.40" y="660.00" width="16.80" height="19.00" fill="#000000"/>
 <rect x="39.20" y="660.00" width="168.00" height="19.00" fill="#000000"/>
 <text x="39.20" y="673.50" fill="#c0c0c0" textLength="168.00" lengthAdjust="spacingAndGlyphs" xml:space="preserve">mode 100644 → 100755</text>
 <rect x="207.20" y="660.00" width="646.80" height="19.00" fill="#000000"/>
-<rect x="14.00" y="679.00" width="16.80" height="19.00" fill="#101010"/>
+<rect x="14.00" y="679.00" width="8.40" height="19.00" fill="#101010"/>
+<rect x="22.40" y="679.00" width="8.40" height="19.00" fill="#101010"/>
 <rect x="30.80" y="679.00" width="25.20" height="19.00" fill="#101010"/>
 <text x="30.80" y="692.50" fill="#c0c0c0" textLength="25.20" lengthAdjust="spacingAndGlyphs" xml:space="preserve">old</text>
 <rect x="56.00" y="679.00" width="25.20" height="19.00" fill="#101010"/>
@@ -835,6 +846,7 @@
 <rect x="215.60" y="831.00" width="596.40" height="19.00" fill="#141414"/>
 <text x="215.60" y="844.50" fill="#f2f2f2" textLength="596.40" lengthAdjust="spacingAndGlyphs" xml:space="preserve">Renaming the type is fine; the package rename needs a deprecation note.</text>
 <rect x="812.00" y="831.00" width="42.00" height="19.00" fill="#141414"/>
+<rect x="14.00" y="850.00" width="840.00" height="19.00" fill="#000000"/>
 <rect x="14.00" y="869.00" width="8.40" height="19.00" fill="#0b0b0b"/>
 <rect x="22.40" y="869.00" width="33.60" height="19.00" fill="#0b0b0b"/>
 <text x="22.40" y="882.50" fill="#a8a8a8" textLength="33.60" lengthAdjust="spacingAndGlyphs" xml:space="preserve">   6</text>
@@ -852,4 +864,5 @@
 <rect x="207.20" y="869.00" width="50.40" height="19.00" fill="#000000"/>
 <text x="207.20" y="882.50" fill="#ff7b71" textLength="50.40" lengthAdjust="spacingAndGlyphs" xml:space="preserve">string</text>
 <rect x="257.60" y="869.00" width="596.40" height="19.00" fill="#000000"/>
+<rect x="14.00" y="888.00" width="840.00" height="19.00" fill="#000000"/>
 </svg>

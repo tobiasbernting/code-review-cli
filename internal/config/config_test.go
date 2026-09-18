@@ -135,6 +135,45 @@ func TestBadEnvValueIsAnError(t *testing.T) {
 	}
 }
 
+// layout goes through every layer like any other setting: the user file,
+// then the repository file, then CRV_LAYOUT. (Flags are applied by cmd/crv.)
+func TestLayoutPrecedence(t *testing.T) {
+	user := useConfigDir(t)
+	repo := t.TempDir()
+
+	cfg, err := Load(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Layout != "unified" {
+		t.Errorf("default layout = %q, want unified", cfg.Layout)
+	}
+
+	write(t, user, UserFile, "layout = \"split\"\n")
+	if cfg, err = Load(repo); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Layout != "split" {
+		t.Errorf("layout = %q, want split from the user file", cfg.Layout)
+	}
+
+	write(t, repo, RepoFile, "layout = \"unified\"\n")
+	if cfg, err = Load(repo); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Layout != "unified" {
+		t.Errorf("layout = %q, want unified from the repository file", cfg.Layout)
+	}
+
+	t.Setenv("CRV_LAYOUT", "split")
+	if cfg, err = Load(repo); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Layout != "split" {
+		t.Errorf("layout = %q, want split from CRV_LAYOUT", cfg.Layout)
+	}
+}
+
 func TestEditorPrecedence(t *testing.T) {
 	t.Setenv("VISUAL", "")
 	t.Setenv("EDITOR", "nano")

@@ -7,7 +7,8 @@
 # Precedence, highest first:
 #   1. command-line flags
 #   2. environment: CRV_HOST, CRV_THEME, CRV_SYNTAX, CRV_DENSITY,
-#      CRV_EDITOR, CRV_WIDTH, CRV_UNTRACKED, CRV_COLOR, NO_COLOR
+#      CRV_LAYOUT, CRV_EDITOR, CRV_WIDTH, CRV_UNTRACKED, CRV_COLOR,
+#      NO_COLOR
 #   3. .crv.toml in the repository being reviewed
 #   4. this file
 #
@@ -30,6 +31,11 @@
 # Row density: comfortable separates hunks and annotation groups; compact
 # gives every line of the terminal to the diff.
 # density = "comfortable"
+
+# Diff layout: unified interleaves old and new in one column; split puts them
+# side by side. Split needs a wide terminal — below 140 columns crv draws
+# unified until there is room. Toggle for the session with s.
+# layout = "unified"
 
 # Editor for composing longer notes with ctrl+e.
 # Unset, crv uses $VISUAL, then $EDITOR, then vi.

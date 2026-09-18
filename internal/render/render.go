@@ -20,6 +20,10 @@
 // Add and delete are stated three times over — edge marker, sign, row tint —
 // so the diff still reads with colour disabled or unperceived, and so that
 // focusing a row can lift its tone without erasing what kind of line it is.
+//
+// In split layout (Layout.Mode) each hunk line is instead a RowPair: the old
+// side and the new side as two mirror-image panes of this same grid, one
+// number column each. See split.go.
 package render
 
 import (
@@ -67,6 +71,7 @@ const (
 	RowNote // a local note or an existing review comment
 	RowSection
 	RowSpacer
+	RowPair // split layout: an old line and a new line side by side
 )
 
 // Density is how much breathing room the document gets. It buys hierarchy —
@@ -97,10 +102,52 @@ func (d Density) String() string {
 	return "comfortable"
 }
 
+// Mode is how the two sides of a diff share the screen: interleaved in one
+// column, or old beside new.
+type Mode int
+
+const (
+	ModeUnified Mode = iota
+	ModeSplit
+)
+
+// SplitMinWidth is the narrowest terminal split is drawn at. Below it each
+// pane would show too little code to be worth the second gutter, so the
+// document falls back to unified until there is room again.
+const SplitMinWidth = 140
+
+// ParseMode resolves a configured layout name.
+func ParseMode(s string) (Mode, bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "unified":
+		return ModeUnified, true
+	case "split":
+		return ModeSplit, true
+	}
+	return ModeUnified, false
+}
+
+func (m Mode) String() string {
+	if m == ModeSplit {
+		return "split"
+	}
+	return "unified"
+}
+
 // Layout is the structural half of presentation: what the document is shaped
 // like, as opposed to what colour it is.
 type Layout struct {
 	Density Density
+	Mode    Mode
+}
+
+// Fit is the layout actually drawn at width: split falls back to unified when
+// the panes would be too narrow to read.
+func (l Layout) Fit(width int) Layout {
+	if l.Mode == ModeSplit && width < SplitMinWidth {
+		l.Mode = ModeUnified
+	}
+	return l
 }
 
 // Row is one visual line. Rows carry their origin (file, hunk) so navigation
@@ -113,6 +160,14 @@ type Row struct {
 	Segs    []Segment
 	Marks   []span // byte ranges that differ from the paired line
 	Text    string // header text, for non-code rows
+
+	// A RowPair shows two lines: Line, Segs and Marks are the left (old)
+	// side, and these the right (new) side. A context line sits on both. A
+	// side whose own line number is zero — Line.OldNum on the left,
+	// Right.NewNum on the right — has no counterpart and is drawn as filler.
+	Right      diffparse.Line
+	RightSegs  []Segment
+	RightMarks []span
 
 	// Detail is the secondary half of a header — a file's +/− counts, a
 	// hunk's line range — drawn quietly on the right so the name it belongs
@@ -143,7 +198,8 @@ type Document struct {
 
 // Build renders every file, drawing the overlay's notes and comments beneath
 // the lines they belong to. Pass the zero Overlay for a plain diff, and the
-// zero Layout for the default comfortable density.
+// zero Layout for the default comfortable, unified document. Build does not
+// know the terminal's width, so a split layout has to arrive already Fit.
 func Build(files []*diffparse.FileDiff, h *Highlighter, ov Overlay, layout Layout) *Document {
 	d := &Document{Files: files, Layout: layout, gutterOld: 3, gutterNew: 3}
 	roomy := layout.Density == DensityComfortable
@@ -192,23 +248,30 @@ func Build(files []*diffparse.FileDiff, h *Highlighter, ov Overlay, layout Layou
 			})
 			segs := highlightHunk(h, f, hunk)
 			marks := markHunk(hunk)
+			if layout.Mode == ModeSplit {
+				pairs := pairHunk(hunk.Lines)
+				for pi, p := range pairs {
+					row := Row{Kind: RowPair, FileIdx: fi, HunkIdx: hi}
+					if p[0] >= 0 {
+						row.Line, row.Segs, row.Marks = hunk.Lines[p[0]], segs[p[0]], marks[p[0]]
+						d.trackGutter(row.Line)
+					}
+					if p[1] >= 0 {
+						row.Right, row.RightSegs, row.RightMarks = hunk.Lines[p[1]], segs[p[1]], marks[p[1]]
+						d.trackGutter(row.Right)
+					}
+					d.Rows = append(d.Rows, row)
+					d.annotate(ov, f.Path(), fi, hi, row.Right.NewNum, roomy && pi < len(pairs)-1)
+				}
+				continue
+			}
 			for li, ln := range hunk.Lines {
 				d.trackGutter(ln)
 				d.Rows = append(d.Rows, Row{
 					Kind: RowCode, FileIdx: fi, HunkIdx: hi,
 					Line: ln, Segs: segs[li], Marks: marks[li],
 				})
-				// Annotations hang off the new-side line number, which is the
-				// coordinate GitHub review comments use.
-				anns := ov.at(f.Path(), ln.NewNum)
-				for _, a := range anns {
-					d.Rows = append(d.Rows, annotationRow(fi, hi, a))
-				}
-				// Give a group of annotations its own air, so the code line
-				// after it does not read as part of the conversation.
-				if roomy && len(anns) > 0 && li < len(hunk.Lines)-1 {
-					d.Rows = append(d.Rows, Row{Kind: RowSpacer, FileIdx: fi, HunkIdx: hi})
-				}
+				d.annotate(ov, f.Path(), fi, hi, ln.NewNum, roomy && li < len(hunk.Lines)-1)
 			}
 		}
 		d.Rows = append(d.Rows, Row{Kind: RowSpacer, FileIdx: fi, HunkIdx: -1})
@@ -224,6 +287,21 @@ func Build(files []*diffparse.FileDiff, h *Highlighter, ov Overlay, layout Layou
 		}
 	}
 	return d
+}
+
+// annotate hangs a line's annotations under the row just added. They hang off
+// the new-side line number, which is the coordinate GitHub review comments
+// use — so in split they belong to the right side, and a row whose right side
+// is filler has none. spaceAfter gives a group of annotations its own air, so
+// the code line after it does not read as part of the conversation.
+func (d *Document) annotate(ov Overlay, path string, fi, hi, newNum int, spaceAfter bool) {
+	anns := ov.at(path, newNum)
+	for _, a := range anns {
+		d.Rows = append(d.Rows, annotationRow(fi, hi, a))
+	}
+	if spaceAfter && len(anns) > 0 {
+		d.Rows = append(d.Rows, Row{Kind: RowSpacer, FileIdx: fi, HunkIdx: hi})
+	}
 }
 
 // annotationRow keeps the body unwrapped: wrapping happens at paint time,
@@ -243,8 +321,12 @@ func (d *Document) trackGutter(ln diffparse.Line) {
 }
 
 // GutterWidth is the width of everything left of the code: the edge marker,
-// both line-number columns with the rule between them, and the sign.
+// both line-number columns with the rule between them, and the sign. In split
+// it is the left pane's, which is where full-width rows indent to.
 func (d *Document) GutterWidth() int {
+	if d.Layout.Mode == ModeSplit {
+		return d.paneGutterWidth()
+	}
 	// edge + " " + old + " │ " + new + " " + sign + " "
 	return 2 + d.gutterOld + 3 + d.gutterNew + 3
 }
@@ -282,32 +364,49 @@ func highlightHunk(h *Highlighter, f *diffparse.FileDiff, hunk diffparse.Hunk) [
 	return out
 }
 
+// changeBlock is a run of deleted lines and the run of added lines straight
+// after it, as indexes into a hunk's lines: [del, add) were deleted and
+// [add, end) added. Either run may be empty.
+type changeBlock struct{ del, add, end int }
+
+// changeBlocks is the one pairing of old lines with new ones: markHunk
+// word-diffs by it and pairHunk lays split rows out by it, so intra-line marks
+// always sit on the row that shows the line they were compared against.
+func changeBlocks(lines []diffparse.Line) []changeBlock {
+	var out []changeBlock
+	i := 0
+	for i < len(lines) {
+		if lines[i].Kind == diffparse.KindContext {
+			i++
+			continue
+		}
+		b := changeBlock{del: i}
+		for i < len(lines) && lines[i].Kind == diffparse.KindDel {
+			i++
+		}
+		b.add = i
+		for i < len(lines) && lines[i].Kind == diffparse.KindAdd {
+			i++
+		}
+		b.end = i
+		out = append(out, b)
+	}
+	return out
+}
+
 // markHunk pairs each run of deleted lines with the run of added lines that
 // follows it, and word-diffs them pairwise. Runs of unequal length are left
 // unmarked: the pairing would be a guess, and a wrong guess highlights the
 // wrong tokens, which is worse than highlighting none.
 func markHunk(hunk diffparse.Hunk) [][]span {
 	marks := make([][]span, len(hunk.Lines))
-	i := 0
-	for i < len(hunk.Lines) {
-		if hunk.Lines[i].Kind != diffparse.KindDel {
-			i++
-			continue
-		}
-		delStart := i
-		for i < len(hunk.Lines) && hunk.Lines[i].Kind == diffparse.KindDel {
-			i++
-		}
-		addStart := i
-		for i < len(hunk.Lines) && hunk.Lines[i].Kind == diffparse.KindAdd {
-			i++
-		}
-		delN, addN := addStart-delStart, i-addStart
+	for _, b := range changeBlocks(hunk.Lines) {
+		delN, addN := b.add-b.del, b.end-b.add
 		if delN != addN || delN == 0 {
 			continue
 		}
 		for k := 0; k < delN; k++ {
-			d, a := delStart+k, addStart+k
+			d, a := b.del+k, b.add+k
 			marks[d], marks[a] = wordDiff(hunk.Lines[d].Text, hunk.Lines[a].Text)
 		}
 	}
@@ -499,7 +598,12 @@ func (r *Renderer) Render(row Row, width, hoffset int, cursor bool) string {
 	case RowMeta:
 		return r.metaRow(row, width, cursor)
 	case RowHunk:
+		if r.Doc.Layout.Mode == ModeSplit {
+			return r.splitHunkRow(row, width, cursor)
+		}
 		return r.hunkRow(row, width, cursor)
+	case RowPair:
+		return r.pairRow(row, width, hoffset, cursor)
 	case RowSpacer:
 		// Painted, not empty: a blank line left to the terminal's own colours
 		// would stripe the theme's surface.
@@ -523,18 +627,18 @@ func (r *Renderer) codeRow(row Row, width, hoffset int, cursor bool) string {
 	b.WriteString(r.style("", tn.bg).Render(" "))
 
 	codeWidth := width - r.Doc.GutterWidth()
-	b.WriteString(r.code(row, codeWidth, hoffset, tn))
+	b.WriteString(r.code(row.Segs, row.Marks, codeWidth, hoffset, tn))
 	return b.String()
 }
 
 // code slices the line into display cells so horizontal scrolling, tab
 // expansion and wide runes all behave, then coalesces neighbouring cells that
 // share styling back into as few escape sequences as possible.
-func (r *Renderer) code(row Row, width, hoffset int, tn rowTones) string {
+func (r *Renderer) code(segs []Segment, marks []span, width, hoffset int, tn rowTones) string {
 	if width <= 0 {
 		return ""
 	}
-	cells := buildCells(row.Segs, row.Marks)
+	cells := buildCells(segs, marks)
 
 	// A line that runs past the edge says so, so a truncated line is never
 	// mistaken for a short one. The marker costs the last column.

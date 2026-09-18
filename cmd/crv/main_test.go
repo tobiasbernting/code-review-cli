@@ -22,8 +22,8 @@ func TestUsageExplainsConfiguration(t *testing.T) {
 		"configuration:",
 		config.RepoFile,
 		userPath,
-		"CRV_HOST", "NO_COLOR",
-		"host =", "theme =", "editor =", "untracked =", "color =", "width =",
+		"CRV_HOST", "CRV_LAYOUT", "NO_COLOR",
+		"host =", "theme =", "density =", "layout =", "editor =", "untracked =", "color =", "width =",
 		"crv --config",
 		"crv --init-config",
 	} {
@@ -133,6 +133,7 @@ func TestPresentationResolvesThemes(t *testing.T) {
 		{name: "unknown theme", cfg: config.Config{Theme: "darkk"}, wantErr: true},
 		{name: "unknown syntax", cfg: config.Config{Theme: "dark", Syntax: "nope"}, wantErr: true},
 		{name: "unknown density", cfg: config.Config{Theme: "dark", Density: "airy"}, wantErr: true},
+		{name: "unknown layout", cfg: config.Config{Theme: "dark", Layout: "side-by-side"}, wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			th, _, err := presentation(tc.cfg)
@@ -167,6 +168,57 @@ func TestPresentationResolvesDensity(t *testing.T) {
 		}
 		if layout.Density != want {
 			t.Errorf("density %q resolved to %v, want %v", in, layout.Density, want)
+		}
+	}
+}
+
+func TestPresentationResolvesLayout(t *testing.T) {
+	for in, want := range map[string]render.Mode{
+		"":        render.ModeUnified,
+		"unified": render.ModeUnified,
+		"split":   render.ModeSplit,
+	} {
+		_, layout, err := presentation(config.Config{Theme: "dark", Layout: in})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if layout.Mode != want {
+			t.Errorf("layout %q resolved to %v, want %v", in, layout.Mode, want)
+		}
+	}
+}
+
+func TestUnknownLayoutErrorNamesTheChoices(t *testing.T) {
+	_, _, err := presentation(config.Config{Theme: "dark", Layout: "sideways"})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	for _, want := range []string{"sideways", "unified", "split"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error does not mention %q: %v", want, err)
+		}
+	}
+}
+
+// Flags sit on top of everything else, but only the ones actually given.
+func TestLayoutFlagOverridesConfig(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{nil, "unified"},
+		{[]string{"--layout", "split"}, "split"},
+		{[]string{"--density", "compact"}, "unified"},
+	} {
+		fs := flag.NewFlagSet("crv", flag.ContinueOnError)
+		opts := registerFlags(fs)
+		if err := fs.Parse(tc.args); err != nil {
+			t.Fatal(err)
+		}
+		cfg := config.Config{Layout: "unified"}
+		applyFlags(fs, opts, &cfg)
+		if cfg.Layout != tc.want {
+			t.Errorf("%v: layout = %q, want %q", tc.args, cfg.Layout, tc.want)
 		}
 	}
 }

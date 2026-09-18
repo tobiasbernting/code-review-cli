@@ -63,6 +63,7 @@ hides them.
 | `g` / `G` | top / bottom |
 | `h` / `l` | scroll horizontally, `0` to reset |
 | `f` | file list |
+| `s` | toggle split / unified layout for this session |
 | `r` | sync the current pull request |
 | `N` / `P` | next / previous thread with new activity |
 | `enter` | expand a thread or open a comment |
@@ -88,6 +89,7 @@ Reviewing:
 | `--theme <name>` | colour theme: `dark`, `light`, `high-contrast` (default `dark`) |
 | `--syntax <name>` | chroma style for code, overriding the theme's own |
 | `--density <name>` | `comfortable` or `compact` row density |
+| `--layout <name>` | `unified` or `split` diff layout (default `unified`) |
 | `--no-color` | disable colour; `NO_COLOR` is honoured too |
 | `--no-untracked` | exclude untracked files |
 | `--width <n>` | output width when stdout is not a terminal |
@@ -142,6 +144,17 @@ theme = "dark"
 syntax = "monokai"    # keep the theme, change the code colours
 density = "compact"   # no separation between hunks
 ```
+
+Split puts old and new side by side instead of interleaving them. It needs
+room: below 140 columns crv draws unified until the terminal is wide enough,
+and piped output (120 columns unless `width` says otherwise) does the same.
+`s` flips between the two for the current session; to make split the default:
+
+```toml
+layout = "split"      # unified or split
+```
+
+<img src="docs/img/layout-split.svg" alt="the same diff in split layout: old lines on the left, new lines on the right, a deletion paired with the addition that replaced it and blank filler where one side has no counterpart" width="100%">
 
 Try one before committing to it, without touching the file:
 
@@ -229,6 +242,7 @@ host = "github.example.com"   # default: whatever gh is configured with
 theme = "dark"                # dark, light or high-contrast
 syntax = "catppuccin-mocha"   # any chroma style name
 density = "comfortable"       # comfortable or compact
+layout = "unified"            # unified or split; split needs 140 columns
 editor = "hx"
 untracked = true
 color = true

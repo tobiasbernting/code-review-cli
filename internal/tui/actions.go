@@ -25,11 +25,11 @@ func (m Model) cursorLine() (path string, line, hunk int, ok bool) {
 	path = m.files[row.FileIdx].Path()
 
 	switch row.Kind {
-	case render.RowCode:
-		if row.Line.NewNum == 0 {
+	case render.RowCode, render.RowPair:
+		if row.NewNum() == 0 {
 			return path, 0, row.HunkIdx, false
 		}
-		return path, row.Line.NewNum, row.HunkIdx, true
+		return path, row.NewNum(), row.HunkIdx, true
 	case render.RowNote:
 		if row.HunkIdx >= 0 && row.Ann != nil && row.Ann.Line > 0 {
 			return path, row.Ann.Line, row.HunkIdx, true

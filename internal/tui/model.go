@@ -144,6 +144,7 @@ func (m *Model) rebuild() {
 type documentAnchor struct {
 	path           string
 	line           int
+	oldLine        int
 	rowKind        render.RowKind
 	annotationKind render.AnnotationKind
 	id             string
@@ -164,13 +165,16 @@ func (m Model) cursorAnchor() documentAnchor {
 		}
 		if row.Ann == nil {
 			anchor.line = row.Line.NewNum
+			if row.IsCode() {
+				anchor.line, anchor.oldLine = row.NewNum(), row.Line.OldNum
+			}
 		}
 	}
 	return anchor
 }
 
 func (m *Model) rebuildAt(anchor documentAnchor) {
-	m.doc = render.Build(m.files, m.hl, m.overlay(), m.layout)
+	m.doc = render.Build(m.files, m.hl, m.overlay(), m.layout.Fit(m.width))
 	m.rend = render.NewRenderer(m.theme, m.doc)
 
 	if len(m.doc.Rows) == 0 {
@@ -192,6 +196,20 @@ func (m *Model) rebuildAt(anchor documentAnchor) {
 		}
 		m.clampScroll()
 		return
+	}
+	// A code row is a RowCode in one layout and a RowPair in the other, so it
+	// is found by its line numbers rather than by its kind.
+	if anchor.rowKind == render.RowCode || anchor.rowKind == render.RowPair {
+		for fi, f := range m.files {
+			if f.Path() != anchor.path {
+				continue
+			}
+			if i, ok := m.doc.LineRow(fi, anchor.line, anchor.oldLine); ok {
+				m.cursor = i
+				m.clampScroll()
+				return
+			}
+		}
 	}
 	for i, row := range m.doc.Rows {
 		if row.Kind != anchor.rowKind || row.FileIdx >= len(m.files) {
@@ -225,6 +243,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		// Crossing SplitMinWidth changes what the document is shaped like,
+		// not only how wide it is painted.
+		if m.doc != nil && m.layout.Fit(m.width).Mode != m.doc.Layout.Mode {
+			m.rebuild()
+		}
 		m.clampScroll()
 		return m, nil
 	case editorFinishedMsg:
@@ -336,6 +359,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "0":
 		m.hoffset = 0
+	case "s":
+		if m.layout.Mode == render.ModeSplit {
+			m.layout.Mode = render.ModeUnified
+		} else {
+			m.layout.Mode = render.ModeSplit
+		}
+		m.rebuild()
+		m.status = m.layout.Mode.String()
 	case "r":
 		return m.startSync(nil)
 	case "N":
@@ -586,6 +617,9 @@ func (m Model) statusBar() string {
 	if m.rangeAnchor > 0 {
 		left += fmt.Sprintf("  ·  range from L%d", m.rangeAnchor)
 	}
+	if m.layout.Mode != m.doc.Layout.Mode {
+		left += "  ·  split → unified (narrow)"
+	}
 	switch {
 	case m.err != "":
 		left += "  ·  " + m.err
@@ -748,6 +782,7 @@ func (m Model) helpView() string {
 		{"J / K, ] / [", "next / previous file (aliases)"},
 		{"g / G", "top / bottom"},
 		{"h / l, ← / →", "scroll horizontally, 0 resets"},
+		{"s", "toggle split / unified layout for this session"},
 		{"f", "file list"},
 		{"r", "sync the pull request diff and threads"},
 		{"N / P", "next / previous thread with new activity"},
