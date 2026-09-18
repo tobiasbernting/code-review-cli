@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/tobiasbernting/code-review-cli/compare/v1.4.0...v1.5.0) (2026-09-18)
+
+
+### Features
+
+* side-by-side split layout ([#24](https://github.com/tobiasbernting/code-review-cli/issues/24)) ([fe272ca](https://github.com/tobiasbernting/code-review-cli/commit/fe272caccc57dcac2814a75443bad632fca6c725))
+
 ## [1.4.0](https://github.com/tobiasbernting/code-review-cli/compare/v1.3.0...v1.4.0) (2026-09-07)
 
 
