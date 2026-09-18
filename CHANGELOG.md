@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/tobiasbernting/krv/compare/v1.5.0...v1.6.0) (2026-09-18)
+
+
+### Features
+
+* open queued pull requests in place ([#26](https://github.com/tobiasbernting/krv/issues/26)) ([fdaf4dc](https://github.com/tobiasbernting/krv/commit/fdaf4dcc465ccba95bf5221a167a25955a43cc2f))
+
 ## [1.5.0](https://github.com/tobiasbernting/code-review-cli/compare/v1.4.0...v1.5.0) (2026-09-18)
 
 
