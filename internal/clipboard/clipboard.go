@@ -3,7 +3,7 @@
 //
 // It always asks the terminal, with an OSC 52 escape sequence: that is the
 // only route that reaches the user's own machine from a remote shell. Not
-// every terminal honours it — macOS Terminal.app does not — so when crv runs
+// every terminal honours it — macOS Terminal.app does not — so when krv runs
 // locally it also hands the text to the platform's copy command. Writing
 // twice is harmless; the second write carries the same text.
 package clipboard
@@ -29,7 +29,7 @@ type Clipboard struct {
 	LookPath func(string) (string, error)
 }
 
-// New is the clipboard of the terminal crv is running in.
+// New is the clipboard of the terminal krv is running in.
 func New() Clipboard {
 	return Clipboard{Out: os.Stdout, GOOS: runtime.GOOS, Getenv: os.Getenv, LookPath: exec.LookPath}
 }

@@ -297,7 +297,7 @@ func TestAppReviewSaysQGoesBack(t *testing.T) {
 	if view := stripANSI(a.View()); !strings.Contains(view, "q queue") || strings.Contains(view, "q quit") {
 		t.Errorf("status bar does not say q goes back:\n%s", view)
 	}
-	a, _ = pressA(t, a, "?")
+	a, _ = pressA(t, a, "?", "G") // General is last; help scrolls
 	if view := stripANSI(a.View()); !strings.Contains(view, "back to the queue") {
 		t.Errorf("help does not say q goes back:\n%s", view)
 	}
