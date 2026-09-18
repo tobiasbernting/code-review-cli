@@ -43,6 +43,11 @@ A bare `crv` lists what is waiting on you, across every repository, with CI
 status, age, and how many unsent notes you already have on each. `enter` opens
 one, `t` switches to your own pull requests, `r` refreshes.
 
+A pull request opened from the queue opens in the same window: `esc` cancels
+while it loads, `q` in the review goes back to the list (refreshed, cursor
+where you left it), and `ctrl+c` quits from anywhere. A review opened directly
+with `crv <n>` still quits on `q`.
+
 The list is one GraphQL request and is cached for five minutes; a failed
 refresh shows the cached list rather than an empty screen. Diffs are never
 cached — reviewing a stale diff is the worst thing this tool could do.
@@ -68,7 +73,8 @@ hides them.
 | `N` / `P` | next / previous thread with new activity |
 | `enter` | expand a thread or open a comment |
 | `?` | help |
-| `q` | quit |
+| `q` | quit, or back to the queue when opened from it |
+| `ctrl+c` | quit |
 
 Reviewing:
 

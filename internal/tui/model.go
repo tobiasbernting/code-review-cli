@@ -41,6 +41,10 @@ type Options struct {
 	Threads   []ghsrc.Thread
 	SyncedAt  time.Time
 	SyncError string
+
+	// FromQueue marks a review opened from the queue: q goes back to the list
+	// and only ctrl+c ends the program.
+	FromQueue bool
 }
 
 type Model struct {
@@ -52,7 +56,9 @@ type Model struct {
 	layout render.Layout
 	cfg    config.Config
 	src    Source
-	review *notes.Review
+
+	fromQueue bool
+	review    *notes.Review
 
 	// blobs maps a path to the hash of its new-side content, so changed drafts
 	// can be detached for re-anchoring without re-reading the file.
@@ -108,6 +114,7 @@ func New(opts Options) Model {
 		layout:          opts.Layout,
 		cfg:             opts.Config,
 		src:             opts.Source,
+		fromQueue:       opts.FromQueue,
 		review:          opts.Review,
 		threads:         opts.Threads,
 		width:           80,
@@ -277,6 +284,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// it while a note is being typed, where q is just a letter.
 		typing := m.mode == modeReply || m.mode == modeInput
 		if key == "ctrl+c" || (key == "q" && !typing) {
+			// Going back to the queue would lose the reply, and with it
+			// whether the change landed; quitting outright is still allowed.
+			if key == "q" && m.fromQueue {
+				m.status = "waiting on GitHub — ctrl+c to quit"
+				return m, nil
+			}
 			return m, tea.Quit
 		}
 		return m, nil
@@ -305,7 +318,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch key {
 	case "q", "ctrl+c":
-		return m, tea.Quit
+		return m.leave(key)
 	case "t":
 		if m.follow.session != nil {
 			m.mode = modeThreads
@@ -398,7 +411,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleFilesKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "q", "ctrl+c":
-		return m, tea.Quit
+		return m.leave(key)
 	case "esc", "f":
 		m.mode = modeDiff
 	case "j", "down":
@@ -592,11 +605,11 @@ func (m Model) statusBar() string {
 		if m.changesView {
 			left = " no changes since your latest review" + m.syncStatus()
 		}
-		return bar(m.theme, m.width, left, fitHint(m.width, left, []string{
+		return bar(m.theme, m.width, left, fitHint(m.width, left, m.quitHints([]string{
 			"r sync  ? help  q quit",
 			"r sync  ? help",
 			"? help",
-		}))
+		})))
 	}
 	row := m.doc.Rows[m.cursor]
 	name := ""
@@ -628,7 +641,7 @@ func (m Model) statusBar() string {
 	}
 	left += m.syncStatus()
 
-	return bar(m.theme, m.width, left, fitHint(m.width, left, m.hintKeys()))
+	return bar(m.theme, m.width, left, fitHint(m.width, left, m.quitHints(m.hintKeys())))
 }
 
 // hintKeys is every screen's key hints in one place, most detailed first so
@@ -750,7 +763,7 @@ func (m Model) filesView() string {
 		b.WriteString("\n")
 	}
 	left := fmt.Sprintf(" %d files", len(m.doc.Files))
-	b.WriteString(bar(m.theme, m.width, left, fitHint(m.width, left, m.hintKeys())))
+	b.WriteString(bar(m.theme, m.width, left, fitHint(m.width, left, m.quitHints(m.hintKeys()))))
 	return b.String()
 }
 
@@ -801,6 +814,9 @@ func (m Model) helpView() string {
 		{"?", "this help"},
 		{"q", "quit"},
 	}
+	if m.fromQueue {
+		rows = append(rows[:len(rows)-1], [2]string{"q", "back to the queue"}, [2]string{"ctrl+c", "quit"})
+	}
 	bg := lipgloss.Color(m.theme.Bg)
 	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Accent)).Background(bg).Bold(true)
 	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Fg)).Background(bg)
@@ -830,6 +846,46 @@ func bar(t render.Theme, width int, left, right string) string {
 		return st.Render(pad(left, width))
 	}
 	return st.Render(left + strings.Repeat(" ", gap) + right + " ")
+}
+
+// quitHints renames q in a review opened from the queue, where it goes back
+// rather than out.
+func (m Model) quitHints(hints []string) []string {
+	if !m.fromQueue {
+		return hints
+	}
+	out := make([]string, len(hints))
+	for i, h := range hints {
+		out[i] = strings.Replace(h, "q quit", "q queue", 1)
+	}
+	return out
+}
+
+// backMsg asks App to close the review and show the queue again.
+type backMsg struct{}
+
+// leave ends the review: back to the queue it came from, or out of the
+// program when there is none or the key was ctrl+c.
+func (m Model) leave(key string) (tea.Model, tea.Cmd) {
+	if m.fromQueue && key != "ctrl+c" {
+		return m, func() tea.Msg { return backMsg{} }
+	}
+	return m, tea.Quit
+}
+
+// ownMsg reports whether a message is one the review's commands produce for
+// the review itself, as opposed to one meant for the program. Every async
+// message type Update handles belongs here, so App can tell a stale one,
+// except editorFinishedMsg: the program delivers it straight from
+// tea.ExecProcess, and the editor holds the terminal until then, so no other
+// review can have opened in the meantime.
+func ownMsg(msg tea.Msg) bool {
+	switch msg.(type) {
+	case backMsg, submitResultMsg, threadActionMsg, threadContextMsg,
+		syncResultMsg, syncTickMsg:
+		return true
+	}
+	return false
 }
 
 // padStyled fills a line that already carries styling out to width. The

@@ -13,28 +13,31 @@ import (
 	"github.com/tobiasbernting/code-review-cli/internal/render"
 )
 
-// Selection is what the queue returns: the pull request to open, if any.
+// Selection is the pull request a queue row names.
 type Selection struct {
 	Repo   string
 	Number int
-	Chosen bool
 }
 
-// QueueModel is the list of pull requests waiting on you. It is a separate
-// program from the diff viewer: choosing a row ends it, and the caller then
-// loads that pull request.
+// QueueModel is the list of pull requests waiting on you. Choosing a row asks
+// whoever runs it to open that pull request; App does, and keeps the queue
+// underneath so the review can return to it.
 type QueueModel struct {
-	client ghsrc.Client
-	theme  render.Theme
-	limit  int
+	theme render.Theme
+	limit int
+	// fetch is where the list comes from: the client's cache in the program,
+	// a stand-in in tests.
+	fetch func(filter ghsrc.Filter, limit int, force bool) ([]ghsrc.QueueItem, time.Time, error)
 
-	filter   ghsrc.Filter
-	items    []ghsrc.QueueItem
-	drafts   map[string]int // "repo#number" -> unsent notes
-	fetched  time.Time
-	loading  bool
-	err      string
-	Selected Selection
+	filter  ghsrc.Filter
+	items   []ghsrc.QueueItem
+	drafts  map[string]int // "repo#number" -> unsent notes
+	fetched time.Time
+	loading bool
+	err     string
+	// notice is a failure that is not the list's, such as a pull request
+	// that would not open. It lasts until the next key.
+	notice string
 
 	cursor        int
 	top           int
@@ -43,7 +46,8 @@ type QueueModel struct {
 
 func NewQueue(client ghsrc.Client, theme render.Theme, limit int) QueueModel {
 	return QueueModel{
-		client: client, theme: theme, limit: limit,
+		theme: theme, limit: limit,
+		fetch:  client.CachedQueue,
 		filter: ghsrc.FilterReviewRequested,
 		drafts: map[string]int{},
 		width:  80, height: 24,
@@ -61,9 +65,9 @@ type queueLoadedMsg struct {
 func (m QueueModel) Init() tea.Cmd { return m.load(false) }
 
 func (m QueueModel) load(force bool) tea.Cmd {
-	client, filter, limit := m.client, m.filter, m.limit
+	fetch, filter, limit := m.fetch, m.filter, m.limit
 	return func() tea.Msg {
-		items, fetched, err := client.CachedQueue(filter, limit, force)
+		items, fetched, err := fetch(filter, limit, force)
 		return queueLoadedMsg{filter: filter, items: items, fetched: fetched, err: err}
 	}
 }
@@ -102,6 +106,7 @@ func (m QueueModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m QueueModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.notice = ""
 	switch msg.String() {
 	case "q", "ctrl+c", "esc":
 		return m, tea.Quit
@@ -131,11 +136,22 @@ func (m QueueModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter", " ":
 		if m.cursor < len(m.items) {
 			it := m.items[m.cursor]
-			m.Selected = Selection{Repo: it.Repo, Number: it.Number, Chosen: true}
-			return m, tea.Quit
+			sel := Selection{Repo: it.Repo, Number: it.Number}
+			return m, func() tea.Msg { return openMsg{sel} }
 		}
 	}
 	return m, nil
+}
+
+// item is the listed row a selection names, or just its name when the list
+// has since changed underneath it.
+func (m QueueModel) item(sel Selection) ghsrc.QueueItem {
+	for _, it := range m.items {
+		if it.Repo == sel.Repo && it.Number == sel.Number {
+			return it
+		}
+	}
+	return ghsrc.QueueItem{Repo: sel.Repo, Number: sel.Number}
 }
 
 // countDrafts reports how many unsent notes each listed pull request has, so
@@ -182,6 +198,15 @@ func (m QueueModel) View() string {
 		b.WriteString(surface.Render(pad("", m.width)) + "\n")
 		b.WriteString(m.message(t.Dim, "nothing waiting on you — press t for your own pull requests") + "\n")
 	default:
+		// An error over a list that is still worth showing takes the last
+		// line of it, rather than replacing it.
+		notice := m.notice
+		if notice == "" {
+			notice = m.err
+		}
+		if notice != "" {
+			body--
+		}
 		if m.cursor >= m.top+body {
 			m.top = m.cursor - body + 1
 		}
@@ -195,6 +220,9 @@ func (m QueueModel) View() string {
 				continue
 			}
 			b.WriteString(m.row(m.items[idx], idx == m.cursor) + "\n")
+		}
+		if notice != "" {
+			b.WriteString(m.message(t.DelSign, notice) + "\n")
 		}
 	}
 

@@ -44,20 +44,22 @@ func TestQueueSelectsPullRequest(t *testing.T) {
 	q := newQueue(t)
 	q = pressQ(t, q, "j")
 
-	next, cmd := q.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	q = next.(QueueModel)
+	_, cmd := q.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
-		t.Error("choosing a row did not end the queue")
+		t.Fatal("choosing a row asked for nothing")
 	}
-	if q.Selected != (Selection{Repo: "acme/y", Number: 4, Chosen: true}) {
-		t.Errorf("selected %+v", q.Selected)
+	if got, ok := cmd().(openMsg); !ok || got.sel != (Selection{Repo: "acme/y", Number: 4}) {
+		t.Errorf("asked to open %+v", got)
 	}
 }
 
-func TestQueueQuitSelectsNothing(t *testing.T) {
-	q := pressQ(t, newQueue(t), "q")
-	if q.Selected.Chosen {
-		t.Error("quitting chose a pull request")
+func TestQueueQuitOpensNothing(t *testing.T) {
+	_, cmd := newQueue(t).Update(keyMsg("q"))
+	if cmd == nil {
+		t.Fatal("q did nothing")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("q did not quit")
 	}
 }
 
