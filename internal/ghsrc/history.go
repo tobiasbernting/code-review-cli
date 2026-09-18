@@ -10,7 +10,7 @@ import (
 )
 
 // SubmittedReview identifies the revision reviewed, including reviews made
-// outside crv. Dismissal does not erase the fact that a revision was reviewed.
+// outside krv. Dismissal does not erase the fact that a revision was reviewed.
 type SubmittedReview struct {
 	ID          int64
 	CommitID    string

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tobiasbernting/code-review-cli/internal/config"
-	"github.com/tobiasbernting/code-review-cli/internal/render"
+	"github.com/tobiasbernting/krv/v2/internal/config"
+	"github.com/tobiasbernting/krv/v2/internal/render"
 )
 
 // The help text is where someone finds out configuration exists at all, so it
@@ -22,10 +22,10 @@ func TestUsageExplainsConfiguration(t *testing.T) {
 		"configuration:",
 		config.RepoFile,
 		userPath,
-		"CRV_HOST", "CRV_LAYOUT", "NO_COLOR",
+		"KRV_HOST", "KRV_LAYOUT", "NO_COLOR",
 		"host =", "theme =", "density =", "layout =", "editor =", "untracked =", "color =", "width =",
-		"crv --config",
-		"crv --init-config",
+		"krv --config",
+		"krv --init-config",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("help text does not mention %q", want)
@@ -35,7 +35,7 @@ func TestUsageExplainsConfiguration(t *testing.T) {
 
 // Every flag the help lists must actually exist, or the help is a lie.
 func TestHelpFlagsExist(t *testing.T) {
-	fs := flag.NewFlagSet("crv", flag.ContinueOnError)
+	fs := flag.NewFlagSet("krv", flag.ContinueOnError)
 	registerFlags(fs)
 
 	for _, line := range strings.Split(usage(), "\n") {
@@ -53,7 +53,7 @@ func TestHelpFlagsExist(t *testing.T) {
 // And the reverse: a flag nobody is told about may as well not exist.
 func TestEveryFlagIsDocumented(t *testing.T) {
 	help := usage()
-	fs := flag.NewFlagSet("crv", flag.ContinueOnError)
+	fs := flag.NewFlagSet("krv", flag.ContinueOnError)
 	registerFlags(fs)
 
 	fs.VisitAll(func(f *flag.Flag) {
@@ -113,7 +113,7 @@ func TestReleaseVersionRejectsPseudoVersions(t *testing.T) {
 	}
 }
 
-// Theme selection is explicit: crv does not sniff the terminal, so a name it
+// Theme selection is explicit: krv does not sniff the terminal, so a name it
 // does not recognise has to fail loudly rather than pick something.
 func TestPresentationResolvesThemes(t *testing.T) {
 	for _, tc := range []struct {
@@ -126,7 +126,7 @@ func TestPresentationResolvesThemes(t *testing.T) {
 		{name: "a preset", cfg: config.Config{Theme: "light"}, wantTheme: "light", wantSyntax: "catppuccin-latte"},
 		{name: "capitalised", cfg: config.Config{Theme: "High-Contrast"}, wantTheme: "high-contrast", wantSyntax: "github-dark"},
 		{name: "unset", cfg: config.Config{}, wantTheme: "dark", wantSyntax: "catppuccin-mocha"},
-		// Configurations written before crv had themes set theme to a chroma
+		// Configurations written before krv had themes set theme to a chroma
 		// style; they must keep working.
 		{name: "a chroma style", cfg: config.Config{Theme: "monokai"}, wantTheme: "dark", wantSyntax: "monokai"},
 		{name: "syntax override", cfg: config.Config{Theme: "light", Syntax: "monokai"}, wantTheme: "light", wantSyntax: "monokai"},
@@ -210,7 +210,7 @@ func TestLayoutFlagOverridesConfig(t *testing.T) {
 		{[]string{"--layout", "split"}, "split"},
 		{[]string{"--density", "compact"}, "unified"},
 	} {
-		fs := flag.NewFlagSet("crv", flag.ContinueOnError)
+		fs := flag.NewFlagSet("krv", flag.ContinueOnError)
 		opts := registerFlags(fs)
 		if err := fs.Parse(tc.args); err != nil {
 			t.Fatal(err)

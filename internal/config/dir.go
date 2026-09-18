@@ -9,7 +9,7 @@ import (
 // homeDir is a variable so tests can redirect it.
 var homeDir = os.UserHomeDir
 
-// Dir is where crv keeps its configuration, saved reviews and caches.
+// Dir is where krv keeps its configuration, saved reviews and caches.
 //
 // XDG semantics are used on Unix rather than os.UserConfigDir, which returns
 // ~/Library/Application Support on macOS — a path that is awkward to type,
@@ -17,36 +17,47 @@ var homeDir = os.UserHomeDir
 // keeps %AppData%, where its own conventions apply.
 func Dir() (string, error) {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "crv"), nil
+		return filepath.Join(xdg, "krv"), nil
 	}
 	if runtime.GOOS == "windows" {
 		base, err := userConfigDir()
 		if err != nil {
 			return "", err
 		}
-		return filepath.Join(base, "crv"), nil
+		return filepath.Join(base, "krv"), nil
 	}
 	home, err := homeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "crv"), nil
+	return filepath.Join(home, ".config", "krv"), nil
 }
 
-// LegacyDir is where earlier versions stored everything: os.UserConfigDir,
-// which differs from Dir on macOS.
-func LegacyDir() (string, error) {
+// legacyName is what krv was called before v2.
+const legacyName = "crv"
+
+// LegacyDirs lists where earlier versions stored everything, most recent
+// first: Dir's location under the old name, then os.UserConfigDir under the
+// old name, where versions before the XDG switch kept it on macOS.
+func LegacyDirs() ([]string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return nil, err
+	}
 	base, err := userConfigDir()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return filepath.Join(base, "crv"), nil
+	return []string{
+		filepath.Join(filepath.Dir(dir), legacyName),
+		filepath.Join(base, legacyName),
+	}, nil
 }
 
-// Migrate moves an existing legacy directory to Dir once, so saved notes are
-// not silently orphaned by the move. It does nothing when the two paths are
-// the same, when there is nothing to move, or when the destination already
-// exists — never merging, never overwriting.
+// Migrate moves the most recent existing legacy directory to Dir once, so
+// saved notes are not silently orphaned by the move. It does nothing when
+// there is nothing to move or when the destination already exists — never
+// merging, never overwriting. Older legacy directories are left in place.
 //
 // It returns the paths involved when a move happened.
 func Migrate() (from, to string, moved bool) {
@@ -54,14 +65,20 @@ func Migrate() (from, to string, moved bool) {
 	if err != nil {
 		return "", "", false
 	}
-	from, err = LegacyDir()
-	if err != nil || from == to {
-		return "", "", false
-	}
 	if _, err := os.Stat(to); err == nil {
 		return "", "", false
 	}
-	if info, err := os.Stat(from); err != nil || !info.IsDir() {
+	candidates, err := LegacyDirs()
+	if err != nil {
+		return "", "", false
+	}
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && info.IsDir() {
+			from = c
+			break
+		}
+	}
+	if from == "" {
 		return "", "", false
 	}
 	if err := os.MkdirAll(filepath.Dir(to), 0o700); err != nil {

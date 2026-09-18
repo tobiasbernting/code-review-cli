@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
+	"github.com/tobiasbernting/krv/v2/internal/diffparse"
 )
 
 const sampleDiff = "diff --git a/f.go b/f.go\n--- a/f.go\n+++ b/f.go\n" +

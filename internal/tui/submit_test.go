@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/tobiasbernting/code-review-cli/internal/ghsrc"
-	"github.com/tobiasbernting/code-review-cli/internal/notes"
+	"github.com/tobiasbernting/krv/v2/internal/ghsrc"
+	"github.com/tobiasbernting/krv/v2/internal/notes"
 )
 
 func submitTestModel(t *testing.T, remoteHead string) (Model, string) {

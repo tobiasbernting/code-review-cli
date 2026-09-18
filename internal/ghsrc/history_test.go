@@ -23,7 +23,7 @@ func fakeThreadsGH(t *testing.T, responses ...string) string {
 	}
 	script := `#!/bin/sh
 set -eu
-dir="$CRV_THREADS_GH_TEST"
+dir="$KRV_THREADS_GH_TEST"
 n=0
 if test -f "$dir/count"; then n=$(cat "$dir/count"); fi
 printf '%s' "$((n + 1))" > "$dir/count"
@@ -36,7 +36,7 @@ cat "$dir/response$n"
 	if err := os.WriteFile(filepath.Join(dir, "gh"), []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("CRV_THREADS_GH_TEST", dir)
+	t.Setenv("KRV_THREADS_GH_TEST", dir)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return dir
 }

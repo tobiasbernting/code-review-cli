@@ -77,7 +77,7 @@ func (c Client) CompareRevisions(repo, baseSHA, headSHA string) (*RevisionCompar
 	if len(oldChanged)+len(newChanged) == 0 {
 		return result, nil
 	}
-	dir, err := os.MkdirTemp("", "crv-revision-")
+	dir, err := os.MkdirTemp("", "krv-revision-")
 	if err != nil {
 		return nil, err
 	}

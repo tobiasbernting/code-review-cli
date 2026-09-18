@@ -16,11 +16,11 @@ func TestTemplateOverridesNothing(t *testing.T) {
 
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	crv := filepath.Join(dir, "crv")
-	if err := os.MkdirAll(crv, 0o700); err != nil {
+	krv := filepath.Join(dir, "krv")
+	if err := os.MkdirAll(krv, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(crv, UserFile), []byte(Template()), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(krv, UserFile), []byte(Template()), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -35,7 +35,7 @@ func TestTemplateOverridesNothing(t *testing.T) {
 	}
 }
 
-// Uncommenting a line has to produce something crv accepts, or the template
+// Uncommenting a line has to produce something krv accepts, or the template
 // is documentation for a format that does not exist.
 func TestTemplateLinesWorkWhenUncommented(t *testing.T) {
 	var uncommented []string

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
+	"github.com/tobiasbernting/krv/v2/internal/diffparse"
 )
 
 var update = flag.Bool("update", false, "rewrite golden files")

@@ -1,36 +1,38 @@
-# crv
+# krv
+
+*Pronounced "korv", Swedish for sausage.*
 
 Review code without leaving the terminal.
 
-`crv` renders and navigates diffs, takes review notes on lines, shows what
+`krv` renders and navigates diffs, takes review notes on lines, shows what
 your teammates already said, and submits the whole thing to GitHub as one
 review — without leaving the terminal.
 
-<img src="docs/img/theme-dark.svg" alt="crv reviewing a diff: added and deleted lines marked at the left edge, the cursor row lit, and two review comments wrapped under the line they belong to" width="100%">
+<img src="docs/img/theme-dark.svg" alt="krv reviewing a diff: added and deleted lines marked at the left edge, the cursor row lit, and two review comments wrapped under the line they belong to" width="100%">
 
 ## Install
 
 ```sh
-go install github.com/tobiasbernting/code-review-cli/cmd/crv@latest   # or @main
+go install github.com/tobiasbernting/krv/v2/cmd/krv@latest   # or @main
 ```
 
 `@latest` is the newest tagged release; `@main` is the current main branch.
-Re-run the same command to update. `crv --version` reports which one you have,
+Re-run the same command to update. `krv --version` reports which one you have,
 even for a `go install` build.
 
 Or download a binary for macOS, Linux or Windows from the
-[releases](https://github.com/tobiasbernting/code-review-cli/releases) page and
-put it on your `PATH`. From a clone: `go build -o crv ./cmd/crv`.
+[releases](https://github.com/tobiasbernting/krv/releases) page and
+put it on your `PATH`. From a clone: `go build -o krv ./cmd/krv`.
 
 ## Use
 
 ```sh
-crv                    # the pull requests waiting on your review
-crv .                  # uncommitted work, including untracked files
-crv main...feature     # a revision range
-crv HEAD~3..HEAD
-crv 42                 # pull request 42, via gh
-crv . | less -R        # non-interactive: prints and exits
+krv                    # the pull requests waiting on your review
+krv .                  # uncommitted work, including untracked files
+krv main...feature     # a revision range
+krv HEAD~3..HEAD
+krv 42                 # pull request 42, via gh
+krv . | less -R        # non-interactive: prints and exits
 ```
 
 Local reviews need only git. The queue and pull requests need
@@ -39,14 +41,14 @@ including an enterprise one.
 
 ### The queue
 
-A bare `crv` lists what is waiting on you, across every repository, with CI
+A bare `krv` lists what is waiting on you, across every repository, with CI
 status, age, and how many unsent notes you already have on each. `enter` opens
 one, `t` switches to your own pull requests, `r` refreshes.
 
 A pull request opened from the queue opens in the same window: `esc` cancels
 while it loads, `q` in the review goes back to the list (refreshed, cursor
 where you left it), and `ctrl+c` quits from anywhere. A review opened directly
-with `crv <n>` still quits on `q`.
+with `krv <n>` still quits on `q`.
 
 The list is one GraphQL request and is cached for five minutes; a failed
 refresh shows the cached list rather than an empty screen. Diffs are never
@@ -130,13 +132,13 @@ author's name: one line where they sit, expanded while the cursor is on them,
 so a conversation never buries the code it is about.
 
 Themes are chosen, not detected: `dark`, `light` and `high-contrast` each set a
-background, so crv never has to guess what your terminal is and never guesses
+background, so krv never has to guess what your terminal is and never guesses
 wrong. Syntax colour is muted toward the surface — least of all on function,
 method and type names — so diff state wins the page while code keeps its shape.
 `--syntax` overrides the chroma style a theme comes with, and a `theme` naming
 a chroma style still means what it used to.
 
-Set the one you want once, in `~/.config/crv/config.toml`:
+Set the one you want once, in `~/.config/krv/config.toml`:
 
 ```toml
 theme = "light"       # dark, light or high-contrast
@@ -152,7 +154,7 @@ density = "compact"   # no separation between hunks
 ```
 
 Split puts old and new side by side instead of interleaving them. It needs
-room: below 140 columns crv draws unified until the terminal is wide enough,
+room: below 140 columns krv draws unified until the terminal is wide enough,
 and piped output (120 columns unless `width` says otherwise) does the same.
 `s` flips between the two for the current session; to make split the default:
 
@@ -165,8 +167,8 @@ layout = "split"      # unified or split
 Try one before committing to it, without touching the file:
 
 ```sh
-CRV_THEME=high-contrast crv .     # this review only
-crv --theme light .               # or just this run
+KRV_THEME=high-contrast krv .     # this review only
+krv --theme light .               # or just this run
 ```
 
 <details>
@@ -184,8 +186,8 @@ this looks.
 
 ## Notes and reviews
 
-Notes are stored outside the repository — under `~/.config/crv`, or
-`$XDG_CONFIG_HOME/crv` if that is set — so they never pollute a worktree that
+Notes are stored outside the repository — under `~/.config/krv`, or
+`$XDG_CONFIG_HOME/krv` if that is set — so they never pollute a worktree that
 is shared or reset. They are keyed by pull
 request number, or by branch for local work, so an agent rewriting files
 underneath you does not orphan them.
@@ -204,7 +206,7 @@ request changes — rather than as a stream of separate comments. Once submitted
 the local copies are dropped: GitHub owns them from then on, which is what stops
 two versions of the same review from disagreeing.
 
-For a local review with no pull request to post to, `crv --export markdown`
+For a local review with no pull request to post to, `krv --export markdown`
 prints the notes for pasting wherever they need to go.
 
 ### Comments and sync
@@ -223,10 +225,10 @@ state and failure model.
 
 ## Configuration
 
-Optional — crv works with none. To start from a documented file:
+Optional — krv works with none. To start from a documented file:
 
 ```sh
-crv --init-config          # writes ~/.config/crv/config.toml
+krv --init-config          # writes ~/.config/krv/config.toml
 ```
 
 Every setting in it is commented out, so nothing is overridden until you
@@ -234,16 +236,16 @@ uncomment it. That is deliberate: a starter file listing real values would pin
 today's defaults forever, and a later change to one would never reach you.
 [`config.example.toml`](config.example.toml) is the same file, for reading here.
 
-Settings are resolved from, highest priority first: command-line flags, `CRV_*`
-environment variables, `.crv.toml` in the repository, and
-`~/.config/crv/config.toml`. `crv --config` prints what won and whether each
+Settings are resolved from, highest priority first: command-line flags, `KRV_*`
+environment variables, `.krv.toml` in the repository, and
+`~/.config/krv/config.toml`. `krv --config` prints what won and whether each
 file exists.
 
-On Windows the directory is `%AppData%\crv`, where that convention applies
+On Windows the directory is `%AppData%\krv`, where that convention applies
 instead.
 
 ```toml
-# .crv.toml — checked in, or not, as you prefer
+# .krv.toml — checked in, or not, as you prefer
 host = "github.example.com"   # default: whatever gh is configured with
 theme = "dark"                # dark, light or high-contrast
 syntax = "catppuccin-mocha"   # any chroma style name

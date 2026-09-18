@@ -10,9 +10,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
-	"github.com/tobiasbernting/code-review-cli/internal/followup"
-	"github.com/tobiasbernting/code-review-cli/internal/ghsrc"
+	"github.com/tobiasbernting/krv/v2/internal/diffparse"
+	"github.com/tobiasbernting/krv/v2/internal/followup"
+	"github.com/tobiasbernting/krv/v2/internal/ghsrc"
 )
 
 func followupModel(t *testing.T) Model {
@@ -128,7 +128,7 @@ func TestReplyFailurePreservesDraftAndSuccessKeepsResolvedThread(t *testing.T) {
 func TestResolveActionAndReplyUseSelectedThread(t *testing.T) {
 	dir := t.TempDir()
 	script := `#!/bin/sh
-cat > "$CRV_TUI_THREAD_PAYLOAD"
+cat > "$KRV_TUI_THREAD_PAYLOAD"
 case "$*" in
 *graphql*) printf '{"data":{"result":{"thread":{"id":"thread","isResolved":false}}}}' ;;
 *replies*) printf '{"id":12,"body":"Please keep the guard","user":{"login":"reviewer"}}' ;;
@@ -139,7 +139,7 @@ esac
 		t.Fatal(err)
 	}
 	payload := filepath.Join(dir, "request")
-	t.Setenv("CRV_TUI_THREAD_PAYLOAD", payload)
+	t.Setenv("KRV_TUI_THREAD_PAYLOAD", payload)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	m := followupModel(t)
 	next, cmd := m.Update(keyMsg("R"))

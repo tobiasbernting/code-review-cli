@@ -27,11 +27,11 @@ func revisionFixture(t *testing.T, base, head map[string]revisionFixtureFile) st
 	dir := t.TempDir()
 	script := `#!/bin/sh
 [ "$1" = api ] || exit 2
-printf '%s\n' "$2" >> "$CRV_REVISION_FIXTURES/calls"
+printf '%s\n' "$2" >> "$KRV_REVISION_FIXTURES/calls"
 id="${2##*/}"
 case "$2" in
-  repos/acme/repo/git/trees/*) id="${id%%\?*}"; cat "$CRV_REVISION_FIXTURES/tree-$id.json" ;;
-  repos/acme/repo/git/blobs/*) cat "$CRV_REVISION_FIXTURES/blob-$id.json" ;;
+  repos/acme/repo/git/trees/*) id="${id%%\?*}"; cat "$KRV_REVISION_FIXTURES/tree-$id.json" ;;
+  repos/acme/repo/git/blobs/*) cat "$KRV_REVISION_FIXTURES/blob-$id.json" ;;
   *) exit 3 ;;
 esac
 `
@@ -39,7 +39,7 @@ esac
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("CRV_REVISION_FIXTURES", dir)
+	t.Setenv("KRV_REVISION_FIXTURES", dir)
 	for ref, files := range map[string]map[string]revisionFixtureFile{revisionBase: base, revisionHead: head} {
 		entries := make([]revisionEntry, 0, len(files))
 		for path, file := range files {
@@ -106,7 +106,7 @@ func TestCompareRevisionsExactSnapshotsAfterDivergence(t *testing.T) {
 			t.Errorf("diff missing %q:\n%s", want, got.Diff)
 		}
 	}
-	if strings.Contains(got.Diff, "unchanged.go") || strings.Contains(got.Diff, "crv-revision-") {
+	if strings.Contains(got.Diff, "unchanged.go") || strings.Contains(got.Diff, "krv-revision-") {
 		t.Errorf("diff includes unchanged or temporary paths: %s", got.Diff)
 	}
 	files := map[string]RevisionFile{}

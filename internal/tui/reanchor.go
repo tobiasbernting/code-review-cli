@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/tobiasbernting/code-review-cli/internal/notes"
-	"github.com/tobiasbernting/code-review-cli/internal/render"
+	"github.com/tobiasbernting/krv/v2/internal/notes"
+	"github.com/tobiasbernting/krv/v2/internal/render"
 )
 
 type reanchorState struct {

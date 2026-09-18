@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tobiasbernting/code-review-cli/internal/diffparse"
+	"github.com/tobiasbernting/krv/v2/internal/diffparse"
 )
 
 // diffArgs are shared by every invocation: rename detection on, colour and

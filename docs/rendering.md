@@ -153,7 +153,7 @@ the same column. A view that borrowed the terminal's background could only ever
 look right on the one background it was written against.
 
 Themes are **chosen, not detected**. Each preset states its own background, so
-crv never has to guess what your terminal is — and never guesses wrong. The
+krv never has to guess what your terminal is — and never guesses wrong. The
 built-ins are `dark`, `light` and `high-contrast`; `render.ThemeByName` reports
 whether a name is one of them, which is how the config layer tells a theme name
 from a chroma style name.
@@ -182,7 +182,7 @@ chroma colours should set.
 
 A user does not have to edit Go to change colours: `--syntax` overrides the
 chroma style a theme comes with, and `theme = "monokai"` — a chroma style name
-where a theme name is expected — still means what it did before crv had themes
+where a theme name is expected — still means what it did before krv had themes
 of its own.
 
 ## Density
