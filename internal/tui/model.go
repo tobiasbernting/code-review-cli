@@ -45,6 +45,8 @@ type Options struct {
 	// FromQueue marks a review opened from the queue: q goes back to the list
 	// and only ctrl+c ends the program.
 	FromQueue bool
+
+	Clipboard Clipboard
 }
 
 type Model struct {
@@ -59,6 +61,7 @@ type Model struct {
 
 	fromQueue bool
 	review    *notes.Review
+	clip      Clipboard
 
 	// blobs maps a path to the hash of its new-side content, so changed drafts
 	// can be detached for re-anchoring without re-reading the file.
@@ -129,6 +132,7 @@ func New(opts Options) Model {
 		newComments:     map[int64]bool{},
 		updatedComments: map[int64]bool{},
 		now:             time.Now,
+		clip:            opts.Clipboard,
 	}
 	m.sync.syncedAt = opts.SyncedAt
 	m.sync.err = opts.SyncError
@@ -275,6 +279,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applySyncResult(msg)
 	case syncTickMsg:
 		return m, tickSyncAge()
+	case yankedMsg:
+		return m.applyYanked(msg)
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	case tea.MouseMsg:
@@ -399,6 +405,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.startComment()
 	case "v":
 		return m.toggleRangeAnchor()
+	case "y":
+		return m.yank(false)
+	case "Y":
+		return m.yank(true)
 	case "e":
 		return m.editNoteUnderCursor()
 	case "d":
@@ -894,7 +904,7 @@ func (m Model) leave(key string) (tea.Model, tea.Cmd) {
 func ownMsg(msg tea.Msg) bool {
 	switch msg.(type) {
 	case backMsg, submitResultMsg, threadActionMsg, threadContextMsg,
-		syncResultMsg, syncTickMsg:
+		syncResultMsg, syncTickMsg, yankedMsg:
 		return true
 	}
 	return false

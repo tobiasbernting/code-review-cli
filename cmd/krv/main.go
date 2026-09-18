@@ -15,6 +15,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
+	"github.com/tobiasbernting/krv/v2/internal/clipboard"
 	"github.com/tobiasbernting/krv/v2/internal/config"
 	"github.com/tobiasbernting/krv/v2/internal/diffparse"
 	"github.com/tobiasbernting/krv/v2/internal/followup"
@@ -353,6 +354,7 @@ func reviewOptions(cfg config.Config, src tui.Source, files []*diffparse.FileDif
 		Source:  src,
 		Review:  review,
 		Threads: threads, SyncedAt: syncedAt, SyncError: syncError,
+		Clipboard: clipboard.New(),
 	}, nil
 }
 
