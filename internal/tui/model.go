@@ -695,7 +695,7 @@ func (m Model) hintKeys() []string {
 	}
 	if m.src.CanSubmit() {
 		return []string{
-			"c comment  x reviewed  t threads  a changes  D PR diff  r sync  S submit  ? help  q quit",
+			"c comment  y copy  x reviewed  t threads  a changes  D PR diff  r sync  S submit  ? help  q quit",
 			"c comment  x reviewed  t threads  r sync  S submit  ? help  q quit",
 			"c comment  x reviewed  S submit  ? help",
 			"c comment  S submit  ? help",
@@ -703,7 +703,7 @@ func (m Model) hintKeys() []string {
 		}
 	}
 	return []string{
-		"c comment  x reviewed  ? help  q quit",
+		"c comment  y copy  x reviewed  ? help  q quit",
 		"c comment  x reviewed  ? help",
 		"c comment  ? help",
 		"? help",
