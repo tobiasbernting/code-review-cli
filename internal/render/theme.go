@@ -58,6 +58,11 @@ type Theme struct {
 	DelSign    string
 	DelWordBg  string
 
+	// FillBg is the empty half of a split row, where a change has no
+	// counterpart on the other side. Neutral and quiet, so it reads as
+	// absence rather than as a third kind of line.
+	FillBg string
+
 	// MarkUnderline underlines intra-line changes as well as shading them,
 	// for themes that cannot rely on the shading being perceived.
 	MarkUnderline bool
@@ -160,6 +165,8 @@ func darkTheme() Theme {
 		DelSign:    "#f07178",
 		DelWordBg:  "#6e2733",
 
+		FillBg: "#16181e",
+
 		CursorBg:  "#262b36",
 		CursorBar: "#7aa2f7",
 
@@ -208,6 +215,8 @@ func lightTheme() Theme {
 		DelEdge:    "#c04a4a",
 		DelSign:    "#b02b2b",
 		DelWordBg:  "#f4bebe",
+
+		FillBg: "#eeeeeb",
 
 		CursorBg:  "#e9ebf0",
 		CursorBar: "#2f6fd0",
@@ -258,6 +267,8 @@ func highContrastTheme() Theme {
 		DelEdge:    "#ff4d6d",
 		DelSign:    "#ff8b99",
 		DelWordBg:  "#7a0f22",
+
+		FillBg: "#121212",
 
 		CursorBg:  "#1c1c1c",
 		CursorBar: "#ffd400",
