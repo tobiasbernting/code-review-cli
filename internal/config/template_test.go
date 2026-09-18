@@ -63,7 +63,7 @@ func TestTemplateLinesWorkWhenUncommented(t *testing.T) {
 
 func TestTemplateDocumentsEverySetting(t *testing.T) {
 	tmpl := Template()
-	for _, key := range []string{"host", "theme", "editor", "untracked", "color", "width"} {
+	for _, key := range []string{"host", "theme", "density", "layout", "editor", "untracked", "color", "width"} {
 		if !strings.Contains(tmpl, "# "+key+" = ") {
 			t.Errorf("the template does not show %q", key)
 		}

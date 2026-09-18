@@ -26,7 +26,8 @@ func Template() string {
 # Precedence, highest first:
 #   1. command-line flags
 #   2. environment: CRV_HOST, CRV_THEME, CRV_SYNTAX, CRV_DENSITY,
-#      CRV_EDITOR, CRV_WIDTH, CRV_UNTRACKED, CRV_COLOR, NO_COLOR
+#      CRV_LAYOUT, CRV_EDITOR, CRV_WIDTH, CRV_UNTRACKED, CRV_COLOR,
+#      NO_COLOR
 #   3. %s in the repository being reviewed
 #   4. this file
 #
@@ -50,6 +51,11 @@ func Template() string {
 # gives every line of the terminal to the diff.
 # density = "%s"
 
+# Diff layout: unified interleaves old and new in one column; split puts them
+# side by side. Split needs a wide terminal — below 140 columns crv draws
+# unified until there is room. Toggle for the session with s.
+# layout = "%s"
+
 # Editor for composing longer notes with ctrl+e.
 # Unset, crv uses $VISUAL, then $EDITOR, then vi.
 # editor = "hx"
@@ -64,7 +70,7 @@ func Template() string {
 
 # Output width used when stdout is not a terminal.
 # width = %d
-`, RepoFile, RepoFile, d.Theme, d.Density, d.Untracked, d.Color, d.Width)
+`, RepoFile, RepoFile, d.Theme, d.Density, d.Layout, d.Untracked, d.Color, d.Width)
 }
 
 // ErrConfigExists is returned rather than overwriting someone's settings.
