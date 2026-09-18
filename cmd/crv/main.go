@@ -271,14 +271,7 @@ func run() error {
 	// A bare `crv` opens the queue: it is the one invocation with no natural
 	// argument, and it is the thing that replaces opening github.com.
 	if fs.NArg() == 0 && opts.export == "" {
-		sel, err := runQueue(repo, cfg, opts.limit)
-		if err != nil {
-			return err
-		}
-		if !sel.Chosen {
-			return nil
-		}
-		return reviewPR(repo, cfg, sel.Repo, sel.Number)
+		return runQueue(repo, cfg, opts.limit)
 	}
 
 	target := "."
@@ -297,8 +290,7 @@ func run() error {
 // start loads the saved notes for a source and shows it, however it was
 // reached: a target on the command line or a row in the queue.
 func start(repo *gitsrc.Repo, cfg config.Config, src tui.Source, files []*diffparse.FileDiff, export string) error {
-	branch, _ := repo.Branch()
-	review, err := notes.Load(src.Scope(repo.Root, branch))
+	review, err := loadNotes(repo, src)
 	if err != nil {
 		return err
 	}
@@ -311,6 +303,25 @@ func start(repo *gitsrc.Repo, cfg config.Config, src tui.Source, files []*diffpa
 		return nil
 	}
 
+	o, err := reviewOptions(cfg, src, files, review)
+	if err != nil {
+		return err
+	}
+	if o.SyncError != "" {
+		fmt.Fprintln(os.Stderr, "crv: "+o.SyncError)
+	}
+
+	if !isatty.IsTerminal(os.Stdout.Fd()) {
+		return printPlain(files, o.Theme, o.Layout, cfg, tui.Overlay(review, o.Threads, files, tui.OverlayOptions{Plain: true}))
+	}
+	_, err = tea.NewProgram(tui.New(o), tea.WithAltScreen()).Run()
+	return err
+}
+
+// reviewOptions gathers what the review screen needs besides the diff: the
+// existing discussion and the resolved presentation. It prints nothing, since
+// from the queue it runs while the screen belongs to the program.
+func reviewOptions(cfg config.Config, src tui.Source, files []*diffparse.FileDiff, review *notes.Review) (tui.Options, error) {
 	var threads []ghsrc.Thread
 	var syncedAt time.Time
 	var syncError string
@@ -323,7 +334,6 @@ func start(repo *gitsrc.Repo, cfg config.Config, src tui.Source, files []*diffpa
 		feed, threadErr := src.Client.Threads(src.Repo, src.PRNumber)
 		if threadErr != nil {
 			syncError = "comments unavailable; press r to retry: " + threadErr.Error()
-			fmt.Fprintln(os.Stderr, "crv: "+syncError)
 		} else {
 			threads = feed.Threads
 			syncedAt = time.Now()
@@ -332,13 +342,9 @@ func start(repo *gitsrc.Repo, cfg config.Config, src tui.Source, files []*diffpa
 
 	th, layout, err := presentation(cfg)
 	if err != nil {
-		return err
+		return tui.Options{}, err
 	}
-
-	if !isatty.IsTerminal(os.Stdout.Fd()) {
-		return printPlain(files, th, layout, cfg, tui.Overlay(review, threads, files, tui.OverlayOptions{Plain: true}))
-	}
-	_, err = tea.NewProgram(tui.New(tui.Options{
+	return tui.Options{
 		Files:   files,
 		Theme:   th,
 		Layout:  layout,
@@ -346,37 +352,33 @@ func start(repo *gitsrc.Repo, cfg config.Config, src tui.Source, files []*diffpa
 		Source:  src,
 		Review:  review,
 		Threads: threads, SyncedAt: syncedAt, SyncError: syncError,
-	}), tea.WithAltScreen()).Run()
-	return err
+	}, nil
 }
 
-// runQueue shows the review queue and returns what was chosen.
-func runQueue(repo *gitsrc.Repo, cfg config.Config, limit int) (tui.Selection, error) {
+// runQueue shows the review queue. Reviews opened from it run inside the same
+// program and return to it.
+func runQueue(repo *gitsrc.Repo, cfg config.Config, limit int) error {
 	client := ghsrc.Client{Host: cfg.Host, Dir: repo.Root}
 	if err := client.Preflight(); err != nil {
-		return tui.Selection{}, fmt.Errorf("%w\n\nthe queue needs gh; local reviews (crv . and crv <range>) do not", err)
+		return fmt.Errorf("%w\n\nthe queue needs gh; local reviews (crv . and crv <range>) do not", err)
 	}
 
 	// Piped output gets the list as text: starting a full-screen program with
 	// no terminal would fail, and `crv | grep` is a reasonable thing to want.
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
-		return tui.Selection{}, printQueue(client, limit)
+		return printQueue(client, limit)
 	}
 
 	th, _, err := presentation(cfg)
 	if err != nil {
-		return tui.Selection{}, err
+		return err
 	}
 
-	model, err := tea.NewProgram(tui.NewQueue(client, th, limit), tea.WithAltScreen()).Run()
-	if err != nil {
-		return tui.Selection{}, err
+	open := func(sel tui.Selection) (tui.Options, error) {
+		return queuedReview(repo, cfg, sel.Repo, sel.Number)
 	}
-	q, ok := model.(tui.QueueModel)
-	if !ok {
-		return tui.Selection{}, nil
-	}
-	return q.Selected, nil
+	_, err = tea.NewProgram(tui.NewApp(tui.NewQueue(client, th, limit), open), tea.WithAltScreen()).Run()
+	return err
 }
 
 // printQueue is the non-interactive queue: one line per pull request.
@@ -407,17 +409,27 @@ func printQueue(client ghsrc.Client, limit int) error {
 	return nil
 }
 
-// reviewPR opens a pull request chosen from the queue. It may live in another
-// repository than the working directory, so the client is pointed at that
-// repository by name rather than by path.
-func reviewPR(repo *gitsrc.Repo, cfg config.Config, name string, number int) error {
+// queuedReview loads a pull request chosen from the queue. It may live in
+// another repository than the working directory, so the client is pointed at
+// that repository by name rather than by path.
+func queuedReview(repo *gitsrc.Repo, cfg config.Config, name string, number int) (tui.Options, error) {
 	client := ghsrc.Client{Host: cfg.Host, Dir: repo.Root, Repo: name}
 
 	src, files, err := loadPR(client, name, number)
 	if err != nil {
-		return err
+		return tui.Options{}, err
 	}
-	return start(repo, cfg, src, files, "")
+	review, err := loadNotes(repo, src)
+	if err != nil {
+		return tui.Options{}, err
+	}
+	return reviewOptions(cfg, src, files, review)
+}
+
+// loadNotes reads the saved notes for a source, keyed the way its scope says.
+func loadNotes(repo *gitsrc.Repo, src tui.Source) (*notes.Review, error) {
+	branch, _ := repo.Branch()
+	return notes.Load(src.Scope(repo.Root, branch))
 }
 
 var prNumber = regexp.MustCompile(`^#?(\d+)$`)

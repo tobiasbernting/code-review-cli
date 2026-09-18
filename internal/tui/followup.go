@@ -78,7 +78,7 @@ func (m Model) handleThreadKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch key {
 	case "q", "ctrl+c":
-		return m, tea.Quit
+		return m.leave(key)
 	case "?":
 		m.helpReturn = m.mode
 		m.mode = modeHelp

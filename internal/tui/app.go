@@ -1,0 +1,197 @@
+package tui
+
+import (
+	"fmt"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+type screen int
+
+const (
+	screenQueue screen = iota
+	screenLoading
+	screenReview
+)
+
+// App is the queue and the reviews opened from it, as one program: choosing
+// a pull request loads it in place, and leaving the review comes back to the
+// list instead of to the shell.
+type App struct {
+	queue  QueueModel
+	review Model
+	open   func(Selection) (Options, error)
+
+	screen screen
+	// loading is the page shown while screen is screenLoading, naming the
+	// pull request being fetched.
+	loading loadingPage
+	// gen numbers each pull request opened. Messages from a load or a review
+	// that has since been left carry an older number and are dropped, so a
+	// late reply can never land in the review that replaced it.
+	gen int
+
+	width, height int
+}
+
+// NewApp starts on the queue. open loads what a row names; it runs off the
+// UI goroutine, so it may block on the network.
+func NewApp(queue QueueModel, open func(Selection) (Options, error)) App {
+	return App{queue: queue, open: open, width: queue.width, height: queue.height}
+}
+
+// openMsg is the queue asking for a pull request.
+type openMsg struct{ sel Selection }
+
+// openedMsg is a finished load.
+type openedMsg struct {
+	gen  int
+	opts Options
+	err  error
+}
+
+func (a App) Init() tea.Cmd { return a.queue.Init() }
+
+func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case reviewMsg:
+		if !a.current(msg.gen, screenReview) {
+			return a, nil
+		}
+		if _, ok := msg.msg.(backMsg); ok {
+			return a.backToQueue()
+		}
+		return a.updateReview(msg.msg)
+
+	case tea.WindowSizeMsg:
+		a.width, a.height = msg.Width, msg.Height
+		a.loading.width, a.loading.height = msg.Width, msg.Height
+		a, _ = a.updateQueue(msg)
+		if a.screen == screenReview {
+			return a.updateReview(msg)
+		}
+		return a, nil
+
+	case queueLoadedMsg:
+		return a.updateQueue(msg)
+
+	case openMsg:
+		a.gen++
+		a.screen = screenLoading
+		a.loading = loadingPage{
+			item:  a.queue.item(msg.sel),
+			theme: a.queue.theme,
+			width: a.width, height: a.height,
+		}
+		gen, open, sel := a.gen, a.open, msg.sel
+		load := func() tea.Msg {
+			opts, err := open(sel)
+			return openedMsg{gen: gen, opts: opts, err: err}
+		}
+		return a, tea.Batch(load, nextFrame(gen))
+
+	case frameMsg:
+		if !a.current(msg.gen, screenLoading) {
+			return a, nil
+		}
+		a.loading.frame++
+		return a, nextFrame(a.gen)
+
+	case openedMsg:
+		if !a.current(msg.gen, screenLoading) {
+			return a, nil
+		}
+		if msg.err != nil {
+			a.screen = screenQueue
+			it := a.loading.item
+			a.queue.notice = fmt.Sprintf("could not open %s#%d: %v", it.Repo, it.Number, msg.err)
+			return a, nil
+		}
+		msg.opts.FromQueue = true
+		a.review = New(msg.opts)
+		a.screen = screenReview
+		next, _ := a.review.Update(tea.WindowSizeMsg{Width: a.width, Height: a.height})
+		a.review = next.(Model)
+		return a, a.tag(a.review.Init())
+	}
+
+	switch a.screen {
+	case screenLoading:
+		if k, ok := msg.(tea.KeyMsg); ok {
+			switch k.String() {
+			case "ctrl+c":
+				return a, tea.Quit
+			case "esc", "q":
+				// The load keeps running; its reply is dropped by gen.
+				a.gen++
+				a.screen = screenQueue
+			}
+		}
+		return a, nil
+	case screenReview:
+		return a.updateReview(msg)
+	case screenQueue:
+		return a.updateQueue(msg)
+	}
+	return a, nil
+}
+
+// current reports whether a message stamped gen still belongs to what is on
+// screen.
+func (a App) current(gen int, s screen) bool { return gen == a.gen && a.screen == s }
+
+func (a App) updateQueue(msg tea.Msg) (App, tea.Cmd) {
+	next, cmd := a.queue.Update(msg)
+	a.queue = next.(QueueModel)
+	return a, cmd
+}
+
+func (a App) updateReview(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := a.review.Update(msg)
+	a.review = next.(Model)
+	return a, a.tag(cmd)
+}
+
+// backToQueue closes the review. The list is shown as it was left and
+// refreshed underneath, since the review may have taken a row off it.
+func (a App) backToQueue() (tea.Model, tea.Cmd) {
+	a.gen++
+	a.screen = screenQueue
+	a.review = Model{}
+	a.queue.loading = true
+	return a, a.queue.load(true)
+}
+
+// reviewMsg is a review's own message, stamped with the review it belongs to.
+type reviewMsg struct {
+	gen int
+	msg tea.Msg
+}
+
+// tag stamps what a review command produces with the current generation.
+// Only the review's own messages are wrapped: the rest, such as the one
+// tea.ExecProcess returns to hand the terminal to an editor, are meant for
+// the program itself and must reach it untouched.
+func (a App) tag(cmd tea.Cmd) tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
+	gen := a.gen
+	return func() tea.Msg {
+		msg := cmd()
+		if ownMsg(msg) {
+			return reviewMsg{gen: gen, msg: msg}
+		}
+		return msg
+	}
+}
+
+func (a App) View() string {
+	switch a.screen {
+	case screenReview:
+		return a.review.View()
+	case screenLoading:
+		return a.loading.View()
+	}
+	return a.queue.View()
+}

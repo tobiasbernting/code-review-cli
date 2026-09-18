@@ -61,6 +61,10 @@ type submitResultMsg struct {
 
 func (m Model) handleSubmitKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.submit.sending {
+		// A hung request must not make the program impossible to leave.
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		}
 		return m, nil
 	}
 	if m.submit.editing {
