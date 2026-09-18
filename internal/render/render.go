@@ -97,10 +97,52 @@ func (d Density) String() string {
 	return "comfortable"
 }
 
+// Mode is how the two sides of a diff share the screen: interleaved in one
+// column, or old beside new.
+type Mode int
+
+const (
+	ModeUnified Mode = iota
+	ModeSplit
+)
+
+// SplitMinWidth is the narrowest terminal split is drawn at. Below it each
+// pane would show too little code to be worth the second gutter, so the
+// document falls back to unified until there is room again.
+const SplitMinWidth = 140
+
+// ParseMode resolves a configured layout name.
+func ParseMode(s string) (Mode, bool) {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "unified":
+		return ModeUnified, true
+	case "split":
+		return ModeSplit, true
+	}
+	return ModeUnified, false
+}
+
+func (m Mode) String() string {
+	if m == ModeSplit {
+		return "split"
+	}
+	return "unified"
+}
+
 // Layout is the structural half of presentation: what the document is shaped
 // like, as opposed to what colour it is.
 type Layout struct {
 	Density Density
+	Mode    Mode
+}
+
+// Fit is the layout actually drawn at width: split falls back to unified when
+// the panes would be too narrow to read.
+func (l Layout) Fit(width int) Layout {
+	if l.Mode == ModeSplit && width < SplitMinWidth {
+		l.Mode = ModeUnified
+	}
+	return l
 }
 
 // Row is one visual line. Rows carry their origin (file, hunk) so navigation
