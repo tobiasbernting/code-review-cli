@@ -315,7 +315,7 @@ func start(repo *gitsrc.Repo, cfg config.Config, src tui.Source, files []*diffpa
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
 		return printPlain(files, o.Theme, o.Layout, cfg, tui.Overlay(review, o.Threads, files, tui.OverlayOptions{Plain: true}))
 	}
-	_, err = tea.NewProgram(tui.New(o), tea.WithAltScreen()).Run()
+	_, err = tea.NewProgram(tui.New(o), screenOptions(cfg)...).Run()
 	return err
 }
 
@@ -356,6 +356,15 @@ func reviewOptions(cfg config.Config, src tui.Source, files []*diffparse.FileDif
 	}, nil
 }
 
+// screenOptions are the full-screen program settings every krv screen shares.
+func screenOptions(cfg config.Config) []tea.ProgramOption {
+	opts := []tea.ProgramOption{tea.WithAltScreen()}
+	if cfg.Mouse {
+		opts = append(opts, tea.WithMouseCellMotion())
+	}
+	return opts
+}
+
 // runQueue shows the review queue. Reviews opened from it run inside the same
 // program and return to it.
 func runQueue(repo *gitsrc.Repo, cfg config.Config, limit int) error {
@@ -378,7 +387,7 @@ func runQueue(repo *gitsrc.Repo, cfg config.Config, limit int) error {
 	open := func(sel tui.Selection) (tui.Options, error) {
 		return queuedReview(repo, cfg, sel.Repo, sel.Number)
 	}
-	_, err = tea.NewProgram(tui.NewApp(tui.NewQueue(client, th, limit), open), tea.WithAltScreen()).Run()
+	_, err = tea.NewProgram(tui.NewApp(tui.NewQueue(client, th, limit), open), screenOptions(cfg)...).Run()
 	return err
 }
 
@@ -513,6 +522,7 @@ func printConfig(cfg config.Config, repoRoot string) error {
 	fmt.Printf("editor     %s\n", cfg.EditorCommand())
 	fmt.Printf("untracked  %t\n", cfg.Untracked)
 	fmt.Printf("color      %t\n", cfg.Color)
+	fmt.Printf("mouse      %t\n", cfg.Mouse)
 	fmt.Printf("width      %d\n", cfg.Width)
 	fmt.Printf("\nuser file  %s%s\n", userPath, exists(userPath))
 	repoFile := filepath.Join(repoRoot, config.RepoFile)

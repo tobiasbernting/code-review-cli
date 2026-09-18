@@ -40,8 +40,10 @@ type QueueModel struct {
 	notice string
 
 	cursor        int
-	top           int
 	width, height int
+
+	lastPress lastPress
+	now       func() time.Time
 }
 
 func NewQueue(client ghsrc.Client, theme render.Theme, limit int) QueueModel {
@@ -52,6 +54,7 @@ func NewQueue(client ghsrc.Client, theme render.Theme, limit int) QueueModel {
 		drafts: map[string]int{},
 		width:  80, height: 24,
 		loading: true,
+		now:     time.Now,
 	}
 }
 
@@ -101,6 +104,43 @@ func (m QueueModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+	case tea.MouseMsg:
+		return m.handleMouse(msg)
+	}
+	return m, nil
+}
+
+// listBody is how many pull requests fit: the screen less the header and the
+// footer, and less the line a notice or error takes over a list.
+func (m QueueModel) listBody() int {
+	body := m.height - 2
+	if m.notice != "" || m.err != "" {
+		body--
+	}
+	return body
+}
+
+// listTop is the first pull request shown: the list scrolls only as far as
+// keeps the selection on screen, below the one-line header.
+func (m QueueModel) listTop() int {
+	return maxInt(0, m.cursor-m.listBody()+1)
+}
+
+func (m QueueModel) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	switch msg.Button {
+	case tea.MouseButtonWheelDown:
+		return m.handleKey(keyRune('j'))
+	case tea.MouseButtonWheelUp:
+		return m.handleKey(keyRune('k'))
+	case tea.MouseButtonLeft:
+		idx := m.listTop() + msg.Y - 1
+		if msg.Action != tea.MouseActionPress || msg.Y < 1 || msg.Y > m.listBody() || idx >= len(m.items) {
+			return m, nil
+		}
+		m.cursor = idx
+		if m.lastPress.double(0, idx, m.now()) {
+			return m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+		}
 	}
 	return m, nil
 }
@@ -204,17 +244,10 @@ func (m QueueModel) View() string {
 		if notice == "" {
 			notice = m.err
 		}
-		if notice != "" {
-			body--
-		}
-		if m.cursor >= m.top+body {
-			m.top = m.cursor - body + 1
-		}
-		if m.cursor < m.top {
-			m.top = m.cursor
-		}
+		body = m.listBody()
+		top := m.listTop()
 		for i := 0; i < body; i++ {
-			idx := m.top + i
+			idx := top + i
 			if idx >= len(m.items) {
 				b.WriteString(surface.Render(pad("", m.width)) + "\n")
 				continue

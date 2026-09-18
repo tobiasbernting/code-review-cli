@@ -8,7 +8,7 @@
 #   1. command-line flags
 #   2. environment: KRV_HOST, KRV_THEME, KRV_SYNTAX, KRV_DENSITY,
 #      KRV_LAYOUT, KRV_EDITOR, KRV_WIDTH, KRV_UNTRACKED, KRV_COLOR,
-#      NO_COLOR
+#      KRV_MOUSE, NO_COLOR
 #   3. .krv.toml in the repository being reviewed
 #   4. this file
 #
@@ -48,6 +48,11 @@
 # Syntax highlighting and diff colours. NO_COLOR disables them whatever this
 # says.
 # color = true
+
+# Clicks, drags and the wheel. Click moves the cursor, a double click opens,
+# a drag selects lines. While krv has the mouse, the terminal's own text
+# selection needs a modifier: hold Shift (Option in iTerm2, fn in Terminal.app).
+# mouse = true
 
 # Output width used when stdout is not a terminal.
 # width = 120
