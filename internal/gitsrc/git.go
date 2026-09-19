@@ -6,6 +6,7 @@ package gitsrc
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -117,6 +118,42 @@ func rangeEnd(spec string) string {
 func (r *Repo) Show(sha, path string) ([]byte, error) {
 	out, err := run(r.Root, "show", sha+":"+path)
 	return []byte(out), err
+}
+
+// NewSide reads files as the new side of a diff has them, to show the
+// unchanged lines the diff leaves out: at the revision a range ends at, or
+// from the working tree for WorkingTree (spec "") and a single revision,
+// which git diffs against the working tree.
+func (r *Repo) NewSide(spec string) func(path string) ([]byte, error) {
+	rev := newSideRev(spec)
+	return func(path string) ([]byte, error) {
+		if !filepath.IsLocal(path) {
+			return nil, fmt.Errorf("%s is outside the repository", path)
+		}
+		if rev == "" {
+			return os.ReadFile(filepath.Join(r.Root, path))
+		}
+		out, err := run(r.Root, "show", rev+":"+filepath.ToSlash(path))
+		return []byte(out), err
+	}
+}
+
+// newSideRev is the revision a range ends at: B for A..B and A...B, HEAD when
+// B is left out. It is empty for a single revision, whose new side is the
+// working tree.
+func newSideRev(spec string) string {
+	if rev, ok := strings.CutSuffix(spec, "^!"); ok {
+		return rev
+	}
+	i := strings.Index(spec, "..")
+	if i < 0 {
+		return ""
+	}
+	rev := strings.TrimPrefix(spec[i+2:], ".")
+	if rev == "" {
+		return "HEAD"
+	}
+	return rev
 }
 
 const emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
