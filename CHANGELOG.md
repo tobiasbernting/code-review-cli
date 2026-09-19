@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.4.0](https://github.com/tobiasbernting/krv/compare/v2.3.0...v2.4.0) (2026-09-19)
+
+
+### Features
+
+* expand the Gaps between hunks ([#40](https://github.com/tobiasbernting/krv/issues/40)) ([f9a7569](https://github.com/tobiasbernting/krv/commit/f9a75696c00a0aa37318a4d722115d62f6c90654))
+* review state in the queue ([#37](https://github.com/tobiasbernting/krv/issues/37)) ([7189fae](https://github.com/tobiasbernting/krv/commit/7189faece3e8919f7ba60804bc73e36465ca1716))
+* suggestions, and open in editor or browser ([#38](https://github.com/tobiasbernting/krv/issues/38)) ([bbcfad5](https://github.com/tobiasbernting/krv/commit/bbcfad599f24508e1e77474ebcb9feeacb55dee8))
+
 ## [2.3.0](https://github.com/tobiasbernting/krv/compare/v2.2.0...v2.3.0) (2026-09-19)
 
 
