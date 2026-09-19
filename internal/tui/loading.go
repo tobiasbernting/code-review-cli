@@ -24,10 +24,11 @@ func nextFrame(gen int) tea.Cmd {
 }
 
 var loadingLogo = []string{
-	`  ___ _ ____   __`,
-	` / __| '__\ \ / /`,
-	`| (__| |   \ V / `,
-	` \___|_|    \_/  `,
+	` _               `,
+	`| | ___ ____   __`,
+	`| |/ / '__\ \ / /`,
+	`|   <| |   \ V / `,
+	`|_|\_\_|    \_/  `,
 }
 
 // loadingHunk is typed out, a few characters a frame, while the pull request
@@ -42,6 +43,9 @@ var loadingHunk = []string{
 	` }`,
 }
 
+// loadingHint is the loading page's keys, on every scene.
+const loadingHint = "esc cancel · tab next"
+
 var spinner = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 const (
@@ -53,6 +57,7 @@ const (
 // loadingPage is what fills the screen while a pull request is fetched.
 type loadingPage struct {
 	item          ghsrc.QueueItem
+	scene         int // index into scenes
 	frame         int
 	theme         render.Theme
 	width, height int
@@ -67,26 +72,36 @@ func (p loadingPage) View() string {
 
 	name := fmt.Sprintf("%s#%d", p.item.Repo, p.item.Number)
 	spin := spinner[p.frame%len(spinner)]
+	sc := scenes[p.scene%len(scenes)]
 
-	boxWidth := hunkWidth + 4
 	var art []string
-	for _, l := range loadingLogo {
-		art = append(art, fg(t.Accent).Bold(true).Render(l))
+	fits := true
+	if sc.full {
+		c := newCanvas(p.width, p.height)
+		if sc.draw(c, p) {
+			return strings.Join(c.rows(space), "\n")
+		}
+		fits = false
+	} else {
+		boxWidth := hunkWidth + 4
+		for _, l := range loadingLogo {
+			art = append(art, fg(t.Accent).Bold(true).Render(l))
+		}
+		art = append(art, "")
+		art = append(art, p.box(sc, fg, boxWidth)...)
+		art = append(art, "",
+			fg(t.Accent).Bold(true).Render(name)+surface.Render("  ")+
+				surface.Render(runewidth.Truncate(p.item.Title, maxInt(1, boxWidth-runewidth.StringWidth(name)-2), "…")),
+		)
+		if p.item.Author != "" {
+			art = append(art, fg(t.Dim).Render("by "+p.item.Author))
+		}
+		art = append(art, "",
+			fg(t.Accent).Render(spin)+fg(t.Dim).Render(" fetching the pull request…"),
+			"",
+			fg(t.Dim).Render(loadingHint),
+		)
 	}
-	art = append(art, "")
-	art = append(art, p.box(fg, boxWidth)...)
-	art = append(art, "",
-		fg(t.Accent).Bold(true).Render(name)+surface.Render("  ")+
-			surface.Render(runewidth.Truncate(p.item.Title, maxInt(1, boxWidth-runewidth.StringWidth(name)-2), "…")),
-	)
-	if p.item.Author != "" {
-		art = append(art, fg(t.Dim).Render("by "+p.item.Author))
-	}
-	art = append(art, "",
-		fg(t.Accent).Render(spin)+fg(t.Dim).Render(" fetching the pull request…"),
-		"",
-		fg(t.Dim).Render("esc cancel"),
-	)
 
 	widest := 0
 	for _, l := range art {
@@ -94,10 +109,10 @@ func (p loadingPage) View() string {
 	}
 	// Art that does not fit is not drawn at all: clipped or wrapped, it is
 	// noise. One line still says what is happening.
-	if widest+4 > p.width || len(art)+2 > p.height {
+	if !fits || widest+4 > p.width || len(art)+2 > p.height {
 		// The title gives way first: which pull request, and how to get
 		// out, are the parts that must survive.
-		head, tail := "loading "+name+" ", " — esc cancel"
+		head, tail := "loading "+name+" ", " — "+loadingHint
 		room := p.width - 4 - runewidth.StringWidth(head) - runewidth.StringWidth(tail)
 		text := head + tail
 		if room > 3 {
@@ -124,50 +139,19 @@ func (p loadingPage) View() string {
 	return b.String()
 }
 
-// box draws the hunk as typed so far, with a blinking cursor at the end.
-func (p loadingPage) box(fg func(string) lipgloss.Style, width int) []string {
+// box frames a boxed scene's canvas, its title set into the top border.
+func (p loadingPage) box(sc scene, fg func(string) lipgloss.Style, width int) []string {
 	t := p.theme
 	border := fg(t.Dim)
+	c := newCanvas(width-4, boxRows)
+	sc.draw(c, p)
 
-	total := 0
-	for _, l := range loadingHunk {
-		total += len(l) + 1
-	}
-	typed := (p.frame * typedPerTick) % (total + holdFrames*typedPerTick)
-
-	title := "─ reviewing "
+	title := "─ " + sc.title + " "
 	lines := []string{border.Render("╭" + title + strings.Repeat("─", width-2-runewidth.StringWidth(title)) + "╮")}
-	cursorShown := false
-	for _, l := range loadingHunk {
-		shown := l
-		if typed < len(l) {
-			shown = l[:maxInt(0, typed)]
-		}
-		typed -= len(l) + 1
-
-		colour := t.Fg
-		switch {
-		case strings.HasPrefix(l, "@@"):
-			colour = t.Accent
-		case strings.HasPrefix(l, "+"):
-			colour = t.AddSign
-		case strings.HasPrefix(l, "-"):
-			colour = t.DelSign
-		}
-		text := fg(colour).Render(shown)
-		used := len(shown)
-		if !cursorShown && typed < 0 {
-			cursorShown = true
-			if p.frame%6 < 3 {
-				text += fg(t.Accent).Render("▌")
-				used++
-			}
-		}
-		pad := maxInt(0, width-4-used)
-		lines = append(lines, border.Render("│ ")+text+fg(t.Fg).Render(strings.Repeat(" ", pad))+border.Render(" │"))
+	for _, row := range c.rows(t.Bg) {
+		lines = append(lines, border.Render("│ ")+row+border.Render(" │"))
 	}
-	lines = append(lines, border.Render("╰"+strings.Repeat("─", width-2)+"╯"))
-	return lines
+	return append(lines, border.Render("╰"+strings.Repeat("─", width-2)+"╯"))
 }
 
 // centered pads a styled line to the middle of a surface-coloured row.

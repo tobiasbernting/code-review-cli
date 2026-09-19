@@ -44,12 +44,13 @@ including an enterprise one.
 A bare `krv` lists what is waiting on you, across every repository, with CI
 status, age, and how many unsent drafts you already have on each. `enter` (or
 a double click) opens one, `t` switches to your own pull requests, `r`
-refreshes.
+refreshes, and `L` shows the loading screen without loading anything.
 
 A pull request opened from the queue opens in the same window: `esc` cancels
-while it loads, `q` in the review goes back to the list (refreshed, cursor
-where you left it), and `ctrl+c` quits from anywhere. A review opened directly
-with `krv <n>` still quits on `q`.
+while it loads (`tab` meanwhile cycles the loading animations), `q` in the
+review goes back to the list (refreshed, cursor where you left it), and
+`ctrl+c` quits from anywhere. A review opened directly with `krv <n>` still
+quits on `q`.
 
 The list is one GraphQL request and is cached for five minutes; a failed
 refresh shows the cached list rather than an empty screen. Diffs are never

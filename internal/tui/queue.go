@@ -173,11 +173,18 @@ func (m QueueModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.cursor, m.loading = 0, true
 		return m, m.load(false)
+	case "L":
+		// The loading page with nothing loading, to look at the animations.
+		sel := Selection{Repo: "krv", Number: 42}
+		if m.cursor < len(m.items) {
+			sel = Selection{Repo: m.items[m.cursor].Repo, Number: m.items[m.cursor].Number}
+		}
+		return m, func() tea.Msg { return openMsg{sel: sel, preview: true} }
 	case "enter", " ":
 		if m.cursor < len(m.items) {
 			it := m.items[m.cursor]
 			sel := Selection{Repo: it.Repo, Number: it.Number}
-			return m, func() tea.Msg { return openMsg{sel} }
+			return m, func() tea.Msg { return openMsg{sel: sel} }
 		}
 	}
 	return m, nil
@@ -259,7 +266,7 @@ func (m QueueModel) View() string {
 		}
 	}
 
-	hint := "enter open  t switch  r refresh  q quit"
+	hint := "enter open  t switch  r refresh  L loading  q quit"
 	if m.err != "" && len(m.items) > 0 {
 		hint = "r retry  " + hint
 	}
