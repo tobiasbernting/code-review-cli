@@ -131,6 +131,125 @@ func TestQueueViewShowsEssentials(t *testing.T) {
 	}
 }
 
+// reviewStateItems are one pull request of each kind the review state
+// columns tell apart.
+func reviewStateItems() []ghsrc.QueueItem {
+	return []ghsrc.QueueItem{
+		{Repo: "acme/x", Number: 8, Title: "feat: notes", Author: "ann", Checks: "SUCCESS",
+			Decision: "CHANGES_REQUESTED", Additions: 123, Deletions: 45,
+			HeadSHA: "bbbb", ReviewedSHA: "aaaa", UpdatedAt: time.Now().Add(-2 * time.Hour)},
+		{Repo: "acme/y", Number: 4, Title: "fix: thing", Author: "bo", Checks: "SUCCESS",
+			Decision: "APPROVED", Additions: 3, Deletions: 1,
+			HeadSHA: "cccc", ReviewedSHA: "cccc", UpdatedAt: time.Now().Add(-3 * time.Hour)},
+		{Repo: "acme/z", Number: 5, Title: "docs: readme", Author: "cy", Checks: "SUCCESS",
+			Decision: "REVIEW_REQUIRED", Additions: 9, HeadSHA: "dddd",
+			UpdatedAt: time.Now().Add(-4 * time.Hour)},
+		{Repo: "acme/w", Number: 6, Title: "chore: deps", Author: "di", Checks: "SUCCESS",
+			Additions: 1, Deletions: 1, HeadSHA: "eeee", UpdatedAt: time.Now().Add(-5 * time.Hour)},
+	}
+}
+
+func reviewStateQueue(t *testing.T, filter ghsrc.Filter, width int) QueueModel {
+	t.Helper()
+	q := NewQueue(ghsrc.Client{}, render.DefaultTheme(), 30)
+	q.filter, q.width, q.height = filter, width, 12
+	q.items = reviewStateItems()
+	return q
+}
+
+func plainRows(q QueueModel) []string {
+	rows := make([]string, len(q.items))
+	for i, it := range q.items {
+		rows[i] = ansiCodes.ReplaceAllString(q.row(it, false), "")
+	}
+	return rows
+}
+
+func TestQueueToReviewShowsReviewState(t *testing.T) {
+	q := reviewStateQueue(t, ghsrc.FilterReviewRequested, 100)
+	rows := plainRows(q)
+
+	if !strings.Contains(rows[0], newCommitsMark) {
+		t.Errorf("new commits since your review are not marked: %q", rows[0])
+	}
+	for i, r := range rows[1:] {
+		if strings.Contains(r, newCommitsMark) {
+			t.Errorf("row %d is marked without new commits since a review: %q", i+1, r)
+		}
+	}
+	for i, want := range []string{"✗ changes", "✓ approved", "○ required"} {
+		if !strings.Contains(rows[i], want) {
+			t.Errorf("row %d is missing %q: %q", i, want, rows[i])
+		}
+	}
+	// No decision reported is shown as none, not as a guessed one.
+	for _, word := range []string{"approved", "changes", "required"} {
+		if strings.Contains(rows[3], word) {
+			t.Errorf("a pull request with no decision claims %q: %q", word, rows[3])
+		}
+	}
+	if !strings.Contains(rows[0], "+123 −45") || !strings.Contains(rows[1], "+3 −1") {
+		t.Errorf("sizes missing:\n%s", strings.Join(rows, "\n"))
+	}
+	// The columns line up: every row ends its size at the same place.
+	for i, r := range rows {
+		if lipgloss.Width(r) != 100 {
+			t.Errorf("row %d is %d wide, want 100: %q", i, lipgloss.Width(r), r)
+		}
+	}
+	column := func(row, word string) int { return lipgloss.Width(row[:strings.Index(row, word)]) }
+	if column(rows[0], "changes") != column(rows[1], "approved") {
+		t.Errorf("the decision column does not line up:\n%s", strings.Join(rows, "\n"))
+	}
+}
+
+func TestQueueMineShowsDecisionAndSizeButNoMarker(t *testing.T) {
+	q := reviewStateQueue(t, ghsrc.FilterAuthored, 100)
+	rows := plainRows(q)
+	for i, r := range rows {
+		if strings.Contains(r, newCommitsMark) {
+			t.Errorf("row %d of your own pull requests has the new-commits marker: %q", i, r)
+		}
+	}
+	if !strings.Contains(rows[0], "✗ changes") || !strings.Contains(rows[0], "+123 −45") {
+		t.Errorf("decision or size missing from your own list: %q", rows[0])
+	}
+}
+
+// A narrow terminal gives up the size first, then the decision's word, and
+// keeps its glyph; the title keeps the room it had before.
+func TestQueueReviewStateDegradesWhenNarrow(t *testing.T) {
+	cases := []struct {
+		width         int
+		size, words   bool
+		decisionGlyph bool
+	}{
+		{100, true, true, true},
+		{50, false, true, true},
+		{40, false, false, true},
+	}
+	for _, tc := range cases {
+		q := reviewStateQueue(t, ghsrc.FilterReviewRequested, tc.width)
+		row := plainRows(q)[2]
+		if got := strings.Contains(row, "+9 −0"); got != tc.size {
+			t.Errorf("width %d: size shown = %v, want %v: %q", tc.width, got, tc.size, row)
+		}
+		if got := strings.Contains(row, "required"); got != tc.words {
+			t.Errorf("width %d: decision word shown = %v, want %v: %q", tc.width, got, tc.words, row)
+		}
+		if got := strings.Contains(row, "○"); got != tc.decisionGlyph {
+			t.Errorf("width %d: decision glyph shown = %v: %q", tc.width, got, row)
+		}
+		// The marker is a single column and never given up.
+		if !strings.Contains(plainRows(q)[0], newCommitsMark) {
+			t.Errorf("width %d: the new-commits marker was dropped", tc.width)
+		}
+		if lipgloss.Width(row) != tc.width {
+			t.Errorf("width %d: row is %d wide: %q", tc.width, lipgloss.Width(row), row)
+		}
+	}
+}
+
 func TestQueueEmptyStateExplainsItself(t *testing.T) {
 	q := NewQueue(ghsrc.Client{}, render.DefaultTheme(), 30)
 	next, _ := q.Update(tea.WindowSizeMsg{Width: 80, Height: 10})
