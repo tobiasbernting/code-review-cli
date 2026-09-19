@@ -27,6 +27,9 @@ type App struct {
 	// loading is the page shown while screen is screenLoading, naming the
 	// pull request being fetched.
 	loading loadingPage
+	// sinceReview is whether the pull request loading opens on the changes
+	// since your latest review.
+	sinceReview bool
 	// gen numbers each pull request opened. Messages from a load or a review
 	// that has since been left carry an older number and are dropped, so a
 	// late reply can never land in the review that replaced it.
@@ -43,10 +46,12 @@ func NewApp(queue QueueModel, open func(Selection) (Options, error)) App {
 
 // openMsg is the queue asking for a pull request.
 // A preview shows the loading page without loading anything; it stays until
-// esc.
+// esc. sinceReview opens on the changes since your latest review, as a
+// press of a would, instead of on your threads.
 type openMsg struct {
-	sel     Selection
-	preview bool
+	sel         Selection
+	preview     bool
+	sinceReview bool
 }
 
 // openedMsg is a finished load.
@@ -84,6 +89,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case openMsg:
 		a.gen++
 		a.screen = screenLoading
+		a.sinceReview = msg.sinceReview
 		a.loading = loadingPage{
 			item:  a.queue.item(msg.sel),
 			scene: rand.IntN(len(scenes)),
@@ -122,6 +128,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.screen = screenReview
 		next, _ := a.review.Update(tea.WindowSizeMsg{Width: a.width, Height: a.height})
 		a.review = next.(Model)
+		if a.sinceReview {
+			// Without a comparison this stays on the threads and says why.
+			next, _ = a.review.showChanges()
+			a.review = next.(Model)
+		}
 		return a, a.tag(a.review.Init())
 	}
 

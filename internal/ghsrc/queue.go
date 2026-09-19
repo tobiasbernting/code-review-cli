@@ -38,6 +38,22 @@ type QueueItem struct {
 	IsDraft   bool
 	Checks    string // SUCCESS, FAILURE, PENDING, ERROR, or "" when there are none
 	UpdatedAt time.Time
+
+	// Decision is APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, or "" when
+	// GitHub reports none, as for a repository that requires no reviews.
+	Decision  string
+	Additions int
+	Deletions int
+	HeadSHA   string
+	// ReviewedSHA is the commit your latest submitted review was on, "" when
+	// you have never reviewed this pull request.
+	ReviewedSHA string
+}
+
+// NewSinceReview reports whether the pull request has moved on from the
+// commit you last reviewed. Never having reviewed it is not new commits.
+func (q QueueItem) NewSinceReview() bool {
+	return q.ReviewedSHA != "" && q.HeadSHA != "" && q.ReviewedSHA != q.HeadSHA
 }
 
 // Age is a compact "how long since this last moved".
@@ -55,12 +71,15 @@ func (q QueueItem) Age() string {
 
 // queueQuery asks for everything the list shows in one request. Fetching the
 // check status per pull request would be one API call each; the last commit's
-// rollup gives it for all of them at once.
+// rollup gives it for all of them at once. Your own latest review comes the
+// same way, which is what tells a pull request with commits you have not seen.
 const queueQuery = `query($q: String!, $limit: Int!) {
   search(query: $q, type: ISSUE, first: $limit) {
     nodes {
       ... on PullRequest {
         number title url isDraft updatedAt
+        reviewDecision additions deletions headRefOid
+        viewerLatestReview { commit { oid } submittedAt state }
         author { login }
         repository { nameWithOwner }
         commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
@@ -94,7 +113,18 @@ func parseQueue(out string) ([]QueueItem, error) {
 					URL        string                 `json:"url"`
 					IsDraft    bool                   `json:"isDraft"`
 					UpdatedAt  time.Time              `json:"updatedAt"`
+					Decision   *string                `json:"reviewDecision"`
+					Additions  int                    `json:"additions"`
+					Deletions  int                    `json:"deletions"`
+					HeadRefOid string                 `json:"headRefOid"`
 					Author     struct{ Login string } `json:"author"`
+					Latest     *struct {
+						Commit *struct {
+							OID string `json:"oid"`
+						} `json:"commit"`
+						SubmittedAt *time.Time `json:"submittedAt"`
+						State       string     `json:"state"`
+					} `json:"viewerLatestReview"`
 					Repository struct {
 						NameWithOwner string `json:"nameWithOwner"`
 					} `json:"repository"`
@@ -124,6 +154,15 @@ func parseQueue(out string) ([]QueueItem, error) {
 		item := QueueItem{
 			Repo: n.Repository.NameWithOwner, Number: n.Number, Title: n.Title,
 			Author: n.Author.Login, URL: n.URL, IsDraft: n.IsDraft, UpdatedAt: n.UpdatedAt,
+			Additions: n.Additions, Deletions: n.Deletions, HeadSHA: n.HeadRefOid,
+		}
+		if n.Decision != nil {
+			item.Decision = *n.Decision
+		}
+		// A pending review has not been submitted, so it reviewed nothing yet;
+		// LatestReview skips it for the same reason.
+		if r := n.Latest; r != nil && r.Commit != nil && r.SubmittedAt != nil && r.State != "PENDING" {
+			item.ReviewedSHA = r.Commit.OID
 		}
 		if len(n.Commits.Nodes) > 0 {
 			if r := n.Commits.Nodes[0].Commit.StatusCheckRollup; r != nil {

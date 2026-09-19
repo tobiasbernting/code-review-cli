@@ -203,7 +203,10 @@ func (m QueueModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor < len(m.items) {
 			it := m.items[m.cursor]
 			sel := Selection{Repo: it.Repo, Number: it.Number}
-			return m, func() tea.Msg { return openMsg{sel: sel} }
+			// A marked row is one you have reviewed before, and what is new
+			// since then is what you came back for.
+			since := m.columns().marker && it.NewSinceReview()
+			return m, func() tea.Msg { return openMsg{sel: sel, sinceReview: since} }
 		}
 	}
 	return m, nil
@@ -324,32 +327,159 @@ func (m QueueModel) row(it ghsrc.QueueItem, selected bool) string {
 		return s
 	}
 
+	cols := m.columns()
 	check, checkFg := m.checkMark(it.Checks)
 	name := fmt.Sprintf("%s#%d", it.Repo, it.Number)
+	meta := m.meta(it)
+
+	line := st(edgeFg).Render(edge) + st(checkFg).Render(check) + st("").Render(" ")
+	if cols.marker {
+		mark := " "
+		if it.NewSinceReview() {
+			mark = newCommitsMark
+		}
+		line += st(t.ChangedFg).Render(mark) + st("").Render(" ")
+	}
+	line += st(t.Accent).Render(name) + st("").Render("  ")
 
 	// The title gets whatever is left, so the identifying columns survive a
 	// narrow terminal.
-	fixed := 2 + 2 + runewidth.StringWidth(name) + 12 + 6
-	titleWidth := maxInt(10, m.width-fixed)
-	title := runewidth.Truncate(it.Title, titleWidth, "…")
+	titleWidth := maxInt(10, m.width-cols.left(name)-runewidth.StringWidth(meta)-cols.right())
+	title := it.Title
 	if it.IsDraft {
 		title = "[draft] " + title
 	}
-
-	line := st(edgeFg).Render(edge) + st(checkFg).Render(check) + st("").Render(" ") +
-		st(t.Accent).Render(name) + st("").Render("  ") +
-		st(textFg).Render(title)
-
-	meta := fmt.Sprintf("  %s  %s", it.Author, it.Age())
-	if n := m.drafts[name]; n > 0 {
-		meta = fmt.Sprintf("  %d draft%s%s", n, plural(n), meta)
-	}
+	line += st(textFg).Render(runewidth.Truncate(title, titleWidth, "…"))
 	line += st(t.Dim).Render(meta)
 
-	if w := lipgloss.Width(line); w < m.width {
+	// The review state keeps to the right edge, where its columns line up
+	// whatever the title and author took.
+	var right string
+	if cols.decision {
+		glyph, word, fg := m.decisionMark(it.Decision)
+		cell := glyph
+		if cols.words {
+			cell = runewidth.FillRight(glyph+" "+word, decisionWidth)
+		}
+		right += st("").Render("  ") + st(fg).Render(cell)
+	}
+	if cols.size {
+		add, del := "", ""
+		if it.Additions != 0 || it.Deletions != 0 {
+			add, del = fmt.Sprintf("+%d", it.Additions), fmt.Sprintf("−%d", it.Deletions)
+		}
+		gap := cols.sizeWidth - runewidth.StringWidth(add) - runewidth.StringWidth(del)
+		if add != "" {
+			gap--
+		}
+		right += st("").Render("  "+strings.Repeat(" ", maxInt(0, gap))) + st(t.AddSign).Render(add)
+		if add != "" {
+			right += st("").Render(" ") + st(t.DelSign).Render(del)
+		}
+	}
+	if right != "" {
+		right += st("").Render(" ")
+	}
+
+	if w := lipgloss.Width(line) + lipgloss.Width(right); w < m.width {
 		line += st("").Render(strings.Repeat(" ", m.width-w))
 	}
-	return line
+	return line + right
+}
+
+// newCommitsMark flags a pull request that has moved on since your latest
+// review. It is a shape, not a colour, so it reads on any terminal.
+const newCommitsMark = "●"
+
+// decisionWidth is the decision column with its word: a glyph, a space and
+// the longest word.
+const decisionWidth = 10
+
+// queueColumns is how much of the review state the rows have room for. It is
+// decided once for the whole list, so every row keeps the same columns.
+type queueColumns struct {
+	// marker is the new-commits column, which only the list to review has:
+	// your own pull requests are not yours to review.
+	marker                bool
+	decision, words, size bool
+	sizeWidth             int
+}
+
+// left is the width of a row before its title.
+func (c queueColumns) left(name string) int {
+	w := 1 + 1 + 1 + runewidth.StringWidth(name) + 2
+	if c.marker {
+		w += 2
+	}
+	return w
+}
+
+// right is the width of the review state at the end of a row.
+func (c queueColumns) right() int {
+	w := 0
+	if c.decision {
+		w += 2 + 1
+		if c.words {
+			w += decisionWidth - 1
+		}
+	}
+	if c.size {
+		w += 2 + c.sizeWidth
+	}
+	if w > 0 {
+		w++
+	}
+	return w
+}
+
+// columns gives up the review state a piece at a time while the widest row
+// would squeeze its title below the ten columns it always had: first the
+// size, then the decision's word. The glyph stays.
+func (m QueueModel) columns() queueColumns {
+	c := queueColumns{marker: m.filter == ghsrc.FilterReviewRequested, decision: true, words: true, size: true}
+	widest := 0
+	for _, it := range m.items {
+		if it.Additions != 0 || it.Deletions != 0 {
+			c.sizeWidth = maxInt(c.sizeWidth, runewidth.StringWidth(fmt.Sprintf("+%d −%d", it.Additions, it.Deletions)))
+		}
+		w := c.left(fmt.Sprintf("%s#%d", it.Repo, it.Number)) + runewidth.StringWidth(m.meta(it))
+		widest = maxInt(widest, w)
+	}
+	c.size = c.sizeWidth > 0
+	fits := func() bool { return widest+c.right()+10 <= m.width }
+	if !fits() {
+		c.size = false
+	}
+	if !fits() {
+		c.words = false
+	}
+	return c
+}
+
+// meta is what a row says after its title: drafts, author and age.
+func (m QueueModel) meta(it ghsrc.QueueItem) string {
+	meta := fmt.Sprintf("  %s  %s", it.Author, it.Age())
+	if n := m.drafts[fmt.Sprintf("%s#%d", it.Repo, it.Number)]; n > 0 {
+		meta = fmt.Sprintf("  %d draft%s%s", n, plural(n), meta)
+	}
+	return meta
+}
+
+// decisionMark renders GitHub's review decision as a glyph and a word. No
+// decision, as in a repository that requires no reviews, is left blank
+// rather than shown as one it is not.
+func (m QueueModel) decisionMark(decision string) (glyph, word, fg string) {
+	t := m.theme
+	switch decision {
+	case "APPROVED":
+		return "✓", "approved", t.ReviewedFg
+	case "CHANGES_REQUESTED":
+		return "✗", "changes", t.DelSign
+	case "REVIEW_REQUIRED":
+		return "○", "required", t.Dim
+	default:
+		return " ", "", t.Dim
+	}
 }
 
 // checkMark renders the CI rollup, in the theme's own colours. An empty state
