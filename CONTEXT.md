@@ -16,6 +16,11 @@ _Avoid_: Note (in user-facing text), pending comment
 A GitHub review discussion: one root comment and its replies.
 _Avoid_: Conversation, remote comment
 
+**Reply**:
+A comment added to an existing Thread, posted to GitHub the moment it is sent.
+A Reply is never a Draft: it is not saved locally or held for submission.
+_Avoid_: Response, answer
+
 **Selection**:
 A contiguous run of lines within one hunk of one file, chosen with `v` or a
 mouse drag; the target of a Draft or a Yank.

@@ -41,6 +41,34 @@ lines. An overflow marker indicates more content. `enter` opens a full-height
 scrollable view; `j` and `k` or the mouse wheel scroll it, and `enter`,
 `esc`, or `q` closes it.
 
+## Replies
+
+`c` on any row of a thread, its summary or any comment, composes a reply;
+on a code line it still drafts a comment. A reply always goes to the thread's
+root comment, which is what GitHub requires. Any thread can be answered:
+resolved, outdated, or on a path absent from the diff. Replying to a collapsed
+thread expands it for the rest of the session.
+
+A reply is posted the moment `enter` is pressed. It is never a draft, is not
+saved locally, and is not part of a submitted review. `ctrl+e` finishes it in
+`$EDITOR`; saving there sends it, and an empty reply is discarded. `esc`
+discards it.
+
+While the reply is posted the review holds still, and a second `enter` sends
+nothing. On success the comment is added to the displayed thread without a
+sync, so the diff does not move; the next sync already knows it, so it is not
+marked new. On failure the composer keeps the text with GitHub's error, and
+`enter` retries. A reply cannot start while a sync is running.
+
+## Requests in flight
+
+A GitHub request is identified by what it does and to what: a sync, a
+submission, a reply or resolution of one thread, the queue for one filter.
+Pressing a key again while its request runs does nothing, rather than sending
+it twice. While a request that changes GitHub runs, a submission, reply or
+resolution, the review ignores other keys except those that quit, so the
+result is never lost to a keypress.
+
 ## Sync
 
 `r` manually syncs a pull request. Opening a pull request performs the initial

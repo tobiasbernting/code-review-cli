@@ -102,6 +102,7 @@ type Model struct {
 	sync        syncState
 	detail      commentDetail
 	reanchor    reanchorState
+	reply       replyState
 	lastPress   lastPress
 	drag        dragState
 
@@ -315,7 +316,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch m.mode {
-	case modeThreads, modeThread, modeReply:
+	case modeReply:
+		return m.handleReplyKey(msg)
+	case modeThreads, modeThread:
 		return m.handleThreadKey(msg)
 	case modeInput:
 		return m.handleInputKey(msg)
@@ -403,6 +406,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// review actions
 	case "c":
+		if id, ok := m.threadUnderCursor(); ok {
+			return m.startReply(id)
+		}
 		return m.startComment()
 	case "v":
 		return m.toggleRangeAnchor()
@@ -539,7 +545,7 @@ func (m *Model) seek(row int) {
 
 func (m *Model) viewportHeight() int {
 	h := m.height - 1 // status bar
-	if m.mode == modeInput {
+	if m.mode == modeInput || m.mode == modeReply {
 		h--
 	}
 	if h < 1 {
@@ -576,8 +582,12 @@ func (m Model) View() string {
 		return m.filesView()
 	case modeSubmit:
 		return m.submitView()
-	case modeThreads, modeThread, modeReply:
+	case modeThreads, modeThread:
 		return m.followupView()
+	case modeReply:
+		if m.reply.from != modeDiff {
+			return m.followupView()
+		}
 	case modeComment:
 		return m.commentView()
 	}
@@ -611,7 +621,7 @@ func (m Model) diffView() string {
 		b.WriteString("\n")
 		written++
 	}
-	if m.mode == modeInput {
+	if m.mode == modeInput || m.mode == modeReply {
 		b.WriteString(m.in.render(m.width, m.theme.NoteFg, m.theme.NoteBg))
 		b.WriteString("\n")
 	}
@@ -695,6 +705,12 @@ func (m Model) hintKeys() []string {
 		return []string{
 			"j/k scroll  esc back",
 			"esc back",
+		}
+	case modeReply:
+		return []string{
+			"enter sends to GitHub  ctrl+e editor  esc cancels",
+			"enter sends to GitHub  esc cancels",
+			"esc cancels",
 		}
 	}
 	if m.src.CanSubmit() {

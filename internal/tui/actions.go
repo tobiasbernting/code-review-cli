@@ -186,7 +186,7 @@ func (m *Model) advanceToNextUnreviewed(current int) {
 func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// ctrl+e escalates a short note to a real editor, keeping what is typed.
 	if msg.String() == "ctrl+e" {
-		return m, m.openEditor(m.in.value)
+		return m, m.openEditor(m.in.value, m.draftEditorHeader())
 	}
 
 	done, cancelled := m.in.handle(msg)
@@ -238,9 +238,9 @@ type editorFinishedMsg struct {
 	err  error
 }
 
-// openEditor hands the terminal to $EDITOR with the current text, prefilled
-// with the target lines as a comment for context.
-func (m Model) openEditor(body string) tea.Cmd {
+// openEditor hands the terminal to $EDITOR with the current text, followed
+// by header: comment lines saying what is being written.
+func (m Model) openEditor(body, header string) tea.Cmd {
 	file, err := os.CreateTemp("", "krv-note-*.md")
 	if err != nil {
 		return func() tea.Msg { return editorFinishedMsg{err: err} }
@@ -253,13 +253,7 @@ func (m Model) openEditor(body string) tea.Cmd {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
-	fmt.Fprintf(&b, "# Draft on %s", m.pending.path)
-	if m.pending.startLine > 0 && m.pending.startLine != m.pending.line {
-		fmt.Fprintf(&b, " lines %d-%d", m.pending.startLine, m.pending.line)
-	} else {
-		fmt.Fprintf(&b, " line %d", m.pending.line)
-	}
-	b.WriteString("\n# Lines starting with # are ignored. An empty draft is discarded.\n")
+	b.WriteString(header)
 	if _, err := file.WriteString(b.String()); err != nil {
 		file.Close()
 		return func() tea.Msg { return editorFinishedMsg{err: err} }
@@ -282,7 +276,23 @@ func (m Model) openEditor(body string) tea.Cmd {
 	})
 }
 
+// draftEditorHeader names the lines a draft is written against.
+func (m Model) draftEditorHeader() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Draft on %s", m.pending.path)
+	if m.pending.startLine > 0 && m.pending.startLine != m.pending.line {
+		fmt.Fprintf(&b, " lines %d-%d", m.pending.startLine, m.pending.line)
+	} else {
+		fmt.Fprintf(&b, " line %d", m.pending.line)
+	}
+	b.WriteString("\n# Lines starting with # are ignored. An empty draft is discarded.\n")
+	return b.String()
+}
+
 func (m Model) applyEditorResult(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
+	if m.mode == modeReply {
+		return m.applyReplyEditorResult(msg)
+	}
 	m.in.stop()
 	m.mode = modeDiff
 	if msg.err != nil {

@@ -84,11 +84,11 @@ Reviewing:
 
 | key | action |
 | --- | --- |
-| `c` | draft a comment on this line or the selection |
+| `c` | draft a comment on this line or the selection; on a thread, reply |
 | `v` | start or clear a selection, then move and press `c` or `y` |
 | `e` / `d` | edit / delete the draft under the cursor |
 | `m` | move a detached draft to a new line or range |
-| `ctrl+e` | finish a draft in `$EDITOR` instead |
+| `ctrl+e` | finish a draft or reply in `$EDITOR` instead |
 | `x` | mark this file reviewed |
 | `S` | submit the review to GitHub |
 | `y` | copy the selection, or the line, hunk or path under the cursor, as code |
@@ -244,6 +244,10 @@ closed. These states are independent, and neither blocks your review. Long
 comments expand to eight lines under the cursor; `enter` or a double click
 opens the complete scrollable body.
 
+Press `c` on any row of a thread to reply. A reply is not a draft: `enter`
+posts it to GitHub at once, and it appears in the thread without a sync. If
+GitHub refuses it, the text stays in the composer to try again.
+
 Press `r` to fetch the latest diff and review threads as one update. Local
 drafts are preserved, the cursor stays near the same file and line, and new or
 edited comments are marked until visited. A failed sync leaves the existing
@@ -372,5 +376,4 @@ goreleaser build --snapshot --clean
 
 ## Planned
 
-- Replying to a teammate's comment thread
 - `LEFT`-side comments on deleted lines
