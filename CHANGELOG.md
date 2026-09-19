@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/tobiasbernting/krv/compare/v2.1.0...v2.2.0) (2026-09-19)
+
+
+### Features
+
+* rotating loading animations ([#32](https://github.com/tobiasbernting/krv/issues/32)) ([b584aa7](https://github.com/tobiasbernting/krv/commit/b584aa74067444b25b856f191290a8a72173e931))
+
 ## [2.1.0](https://github.com/tobiasbernting/krv/compare/v2.0.0...v2.1.0) (2026-09-19)
 
 
