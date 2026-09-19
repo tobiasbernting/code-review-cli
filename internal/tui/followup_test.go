@@ -17,6 +17,15 @@ import (
 
 func followupModel(t *testing.T) Model {
 	t.Helper()
+	s := followupSession()
+	return newReviewModel(t, func(o *Options) {
+		o.Source = Source{Kind: SourcePR, Repo: "team/project", PRNumber: 42, HeadSHA: "head", Viewer: "reviewer", Author: "teammate", FollowUp: s}
+	})
+}
+
+// followupSession is a pull request you reviewed at "baseline" that has since
+// moved to "head".
+func followupSession() *followup.Session {
 	comment := ghsrc.Comment{ID: 11, Body: "Keep the nil guard", DiffHunk: "@@ -1 +1 @@\n-guard()\n+run()", OriginalCommitID: "original"}
 	comment.User.Login = "reviewer"
 	s := &followup.Session{
@@ -27,9 +36,7 @@ func followupModel(t *testing.T) Model {
 		Comparison: &ghsrc.RevisionComparison{BaseSHA: "baseline", HeadSHA: "head", Diff: noteDiff,
 			HeadFiles: map[string]string{"svc.go": "100644:bbbbbbb"}},
 	}
-	return newReviewModel(t, func(o *Options) {
-		o.Source = Source{Kind: SourcePR, Repo: "team/project", PRNumber: 42, HeadSHA: "head", Viewer: "reviewer", Author: "teammate", FollowUp: s}
-	})
+	return s
 }
 
 func TestFollowupStartsWithResolvedThreadsVisible(t *testing.T) {

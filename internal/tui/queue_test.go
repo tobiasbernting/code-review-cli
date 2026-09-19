@@ -53,6 +53,33 @@ func TestQueueSelectsPullRequest(t *testing.T) {
 	}
 }
 
+// A pull request with commits since your review opens on those changes;
+// every other one opens as it always did.
+func TestQueueEnterAsksForChangesSinceReview(t *testing.T) {
+	cases := []struct {
+		filter ghsrc.Filter
+		row    int
+		want   bool
+	}{
+		{ghsrc.FilterReviewRequested, 0, true},  // new commits since your review
+		{ghsrc.FilterReviewRequested, 1, false}, // reviewed at its head
+		{ghsrc.FilterReviewRequested, 2, false}, // never reviewed
+		{ghsrc.FilterAuthored, 0, false},        // your own list has no marker
+	}
+	for _, tc := range cases {
+		q := reviewStateQueue(t, tc.filter, 100)
+		q.cursor = tc.row
+		_, cmd := q.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		got, ok := cmd().(openMsg)
+		if !ok {
+			t.Fatalf("%s row %d: enter asked for nothing", tc.filter.Label(), tc.row)
+		}
+		if got.sinceReview != tc.want {
+			t.Errorf("%s row %d: sinceReview = %v, want %v", tc.filter.Label(), tc.row, got.sinceReview, tc.want)
+		}
+	}
+}
+
 func TestQueueQuitOpensNothing(t *testing.T) {
 	_, cmd := newQueue(t).Update(keyMsg("q"))
 	if cmd == nil {

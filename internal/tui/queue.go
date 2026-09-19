@@ -193,7 +193,10 @@ func (m QueueModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor < len(m.items) {
 			it := m.items[m.cursor]
 			sel := Selection{Repo: it.Repo, Number: it.Number}
-			return m, func() tea.Msg { return openMsg{sel: sel} }
+			// A marked row is one you have reviewed before, and what is new
+			// since then is what you came back for.
+			since := m.columns().marker && it.NewSinceReview()
+			return m, func() tea.Msg { return openMsg{sel: sel, sinceReview: since} }
 		}
 	}
 	return m, nil
