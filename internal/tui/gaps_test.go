@@ -286,6 +286,9 @@ func TestExpandedLinesCannotBeCommentedOn(t *testing.T) {
 	if got := press(t, on, "c"); got.err != "can't comment outside the diff" || got.mode != modeDiff {
 		t.Errorf("c on an expanded line: err %q, mode %v", got.err, got.mode)
 	}
+	if got := press(t, on, "C"); got.err != "can't comment outside the diff" || got.mode != modeDiff {
+		t.Errorf("C on an expanded line: err %q, mode %v", got.err, got.mode)
+	}
 	if got := press(t, on, "v"); got.rangeAnchor != 0 {
 		t.Error("a selection started on an expanded line")
 	}
