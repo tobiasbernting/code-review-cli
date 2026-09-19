@@ -15,6 +15,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
+	"github.com/tobiasbernting/krv/v2/internal/clipboard"
 	"github.com/tobiasbernting/krv/v2/internal/config"
 	"github.com/tobiasbernting/krv/v2/internal/diffparse"
 	"github.com/tobiasbernting/krv/v2/internal/followup"
@@ -111,7 +112,7 @@ flags:
   --no-untracked     exclude untracked files from the working-tree diff
   --width <n>        output width when not attached to a terminal
   --limit <n>        how many pull requests the queue lists (default 30)
-  --export markdown  print the saved notes for this review and exit
+  --export markdown  print the saved drafts for this review and exit
   --config           print the resolved configuration and exit
   --init-config      write a starter configuration file and exit
   --version          print version and exit
@@ -123,7 +124,7 @@ configuration:
     1. the flags above
     2. environment: KRV_HOST, KRV_THEME, KRV_SYNTAX, KRV_DENSITY,
        KRV_LAYOUT, KRV_EDITOR, KRV_WIDTH, KRV_UNTRACKED, KRV_COLOR,
-       NO_COLOR
+       KRV_MOUSE, NO_COLOR
     3. %s in the repository being reviewed
     4. %s
 
@@ -142,13 +143,14 @@ configuration:
     editor = "hx"                 # default: $VISUAL, then $EDITOR, then vi
     untracked = true              # include untracked files in krv .
     color = true
+    mouse = true                  # false leaves clicks and drags to the terminal
     width = 120                   # used when output is piped
 
   Set host in a repository's %s to review on an enterprise host
   without changing anything globally.
 
   `+"`krv --config`"+` prints which settings are in effect and which files were
-  read. Review notes are kept in:
+  read. Review drafts are kept in:
     %s
 
 `, config.RepoFile, userPath, config.RepoFile, notesDir)
@@ -187,7 +189,7 @@ func registerFlags(fs *flag.FlagSet) *options {
 	fs.StringVar(&o.syntax, "syntax", "", "chroma style for code")
 	fs.StringVar(&o.density, "density", "", "row density: comfortable or compact")
 	fs.StringVar(&o.layout, "layout", "", "diff layout: unified or split")
-	fs.StringVar(&o.export, "export", "", "print saved notes: markdown")
+	fs.StringVar(&o.export, "export", "", "print saved drafts: markdown")
 	fs.BoolVar(&o.noColor, "no-color", false, "disable colour")
 	fs.BoolVar(&o.noUntracked, "no-untracked", false, "exclude untracked files")
 	fs.BoolVar(&o.showConfig, "config", false, "print the resolved configuration")
@@ -242,7 +244,7 @@ func run() error {
 	// location — before --init-config, which would otherwise create the new
 	// directory and strand the old one.
 	if from, to, moved := config.Migrate(); moved {
-		fmt.Fprintf(os.Stderr, "krv: moved your notes and settings\n     from %s\n     to   %s\n", from, to)
+		fmt.Fprintf(os.Stderr, "krv: moved your drafts and settings\n     from %s\n     to   %s\n", from, to)
 	}
 
 	if opts.initConfig {
@@ -315,7 +317,7 @@ func start(repo *gitsrc.Repo, cfg config.Config, src tui.Source, files []*diffpa
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
 		return printPlain(files, o.Theme, o.Layout, cfg, tui.Overlay(review, o.Threads, files, tui.OverlayOptions{Plain: true}))
 	}
-	_, err = tea.NewProgram(tui.New(o), tea.WithAltScreen()).Run()
+	_, err = tea.NewProgram(tui.New(o), screenOptions(cfg)...).Run()
 	return err
 }
 
@@ -353,7 +355,17 @@ func reviewOptions(cfg config.Config, src tui.Source, files []*diffparse.FileDif
 		Source:  src,
 		Review:  review,
 		Threads: threads, SyncedAt: syncedAt, SyncError: syncError,
+		Clipboard: clipboard.New(),
 	}, nil
+}
+
+// screenOptions are the full-screen program settings every krv screen shares.
+func screenOptions(cfg config.Config) []tea.ProgramOption {
+	opts := []tea.ProgramOption{tea.WithAltScreen()}
+	if cfg.Mouse {
+		opts = append(opts, tea.WithMouseCellMotion())
+	}
+	return opts
 }
 
 // runQueue shows the review queue. Reviews opened from it run inside the same
@@ -378,7 +390,7 @@ func runQueue(repo *gitsrc.Repo, cfg config.Config, limit int) error {
 	open := func(sel tui.Selection) (tui.Options, error) {
 		return queuedReview(repo, cfg, sel.Repo, sel.Number)
 	}
-	_, err = tea.NewProgram(tui.NewApp(tui.NewQueue(client, th, limit), open), tea.WithAltScreen()).Run()
+	_, err = tea.NewProgram(tui.NewApp(tui.NewQueue(client, th, limit), open), screenOptions(cfg)...).Run()
 	return err
 }
 
@@ -492,7 +504,7 @@ func printExport(format string, review *notes.Review) error {
 	}
 	md := review.Markdown()
 	if md == "" {
-		fmt.Fprintln(os.Stderr, "krv: no notes for this review")
+		fmt.Fprintln(os.Stderr, "krv: no drafts for this review")
 		return nil
 	}
 	_, err := os.Stdout.WriteString(md)
@@ -513,6 +525,7 @@ func printConfig(cfg config.Config, repoRoot string) error {
 	fmt.Printf("editor     %s\n", cfg.EditorCommand())
 	fmt.Printf("untracked  %t\n", cfg.Untracked)
 	fmt.Printf("color      %t\n", cfg.Color)
+	fmt.Printf("mouse      %t\n", cfg.Mouse)
 	fmt.Printf("width      %d\n", cfg.Width)
 	fmt.Printf("\nuser file  %s%s\n", userPath, exists(userPath))
 	repoFile := filepath.Join(repoRoot, config.RepoFile)
@@ -523,7 +536,7 @@ func printConfig(cfg config.Config, repoRoot string) error {
 		fmt.Printf("loaded     (none — all defaults; krv --help shows how to create one)\n")
 	}
 	dir, _ := notes.Dir()
-	fmt.Printf("notes      %s\n", dir)
+	fmt.Printf("drafts     %s\n", dir)
 	return nil
 }
 

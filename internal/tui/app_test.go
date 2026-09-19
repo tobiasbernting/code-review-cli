@@ -297,7 +297,7 @@ func TestAppReviewSaysQGoesBack(t *testing.T) {
 	if view := stripANSI(a.View()); !strings.Contains(view, "q queue") || strings.Contains(view, "q quit") {
 		t.Errorf("status bar does not say q goes back:\n%s", view)
 	}
-	a, _ = pressA(t, a, "?")
+	a, _ = pressA(t, a, "?", "G") // General is last; help scrolls
 	if view := stripANSI(a.View()); !strings.Contains(view, "back to the queue") {
 		t.Errorf("help does not say q goes back:\n%s", view)
 	}
@@ -364,5 +364,40 @@ func TestAppCtrlCQuitsFromReview(t *testing.T) {
 
 	if _, quit := pressA(t, a, "ctrl+c"); !quit {
 		t.Error("ctrl+c did not end the program")
+	}
+}
+
+func TestAppDoubleClickInTheQueueOpensThePullRequest(t *testing.T) {
+	var asked []Selection
+	a := newApp(t, openerFor(t, &asked))
+	a.queue.now = ticking(100 * time.Millisecond)
+	for range 2 {
+		next, cmd := a.Update(click(2))
+		a, _ = settle(t, next.(App), cmd)
+	}
+	if a.screen != screenReview || len(asked) != 1 || asked[0].Number != 4 {
+		t.Errorf("double click on the second row: screen %v, opened %+v", a.screen, asked)
+	}
+}
+
+func TestAppDropsAYankResultFromALeftReview(t *testing.T) {
+	clip := &fakeClipboard{err: errors.New("from the old review")}
+	open := func(sel Selection) (Options, error) {
+		o, err := openerFor(t, nil)(sel)
+		o.Clipboard = clip
+		return o, err
+	}
+	a := newApp(t, open)
+	a, _ = pressA(t, a, "enter")
+	next, yank := a.Update(keyMsg("y")) // the cursor starts on a file header
+	a = next.(App)
+	if yank == nil {
+		t.Fatal("y asked for nothing")
+	}
+	a, _ = pressA(t, a, "q", "enter")
+
+	next, _ = a.Update(yank())
+	if a = next.(App); a.review.err != "" {
+		t.Errorf("the new review reported the old one's copy: %q", a.review.err)
 	}
 }
