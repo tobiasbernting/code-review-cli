@@ -312,7 +312,7 @@ func TestThreadListDoubleClickOpensTheThread(t *testing.T) {
 
 func TestMouseIgnoredWhileGitHubIsBusy(t *testing.T) {
 	m := newMouseModel(t)
-	m.follow.busy = true
+	m.requests.start(reqResolve("t1"))
 	m = mouse(t, m, wheel(tea.MouseButtonWheelDown), click(5))
 	if m.top != 0 || m.cursor != m.nextSelectable(0, 1) {
 		t.Errorf("mouse acted while busy: top %d cursor %d", m.top, m.cursor)

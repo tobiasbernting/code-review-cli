@@ -19,7 +19,6 @@ type followupState struct {
 	session                                         *followup.Session
 	threads                                         []ghsrc.Thread
 	cursor, top                                     int
-	busy                                            bool
 	context, contextErr, contextThread, contextHead string
 	contextLoading                                  bool
 }
@@ -46,34 +45,8 @@ func (m Model) selectedThread() (ghsrc.Thread, bool) {
 
 func (m Model) handleThreadKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
-	if m.sync.syncing {
+	if m.requests.has(reqSync) {
 		m.status = "wait for sync to finish"
-		return m, nil
-	}
-	if m.mode == modeReply {
-		done, cancelled := m.in.handle(msg)
-		if cancelled {
-			m.in.stop()
-			m.mode = modeThread
-			return m, nil
-		}
-		if done {
-			body := strings.TrimSpace(m.in.value)
-			if body == "" {
-				m.err = "write a reply, or press esc to cancel"
-				return m, nil
-			}
-			t, ok := m.selectedThread()
-			if !ok || len(t.Comments) == 0 {
-				return m, nil
-			}
-			m.follow.busy = true
-			src := m.src
-			return m, func() tea.Msg {
-				comment, err := src.Client.Reply(src.Repo, src.PRNumber, t.Comments[0].ID, body)
-				return threadActionMsg{id: t.ID, reply: &comment, err: err}
-			}
-		}
 		return m, nil
 	}
 	switch key {
@@ -147,9 +120,8 @@ func (m Model) handleThreadKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "x":
 		return m.verifyThread()
 	case "c":
-		if _, ok := m.selectedThread(); ok {
-			m.mode = modeReply
-			m.in.start("reply to GitHub (enter sends) ›", "")
+		if t, ok := m.selectedThread(); ok {
+			return m.startReply(t.ID)
 		}
 	case "R":
 		t, ok := m.selectedThread()
@@ -164,11 +136,14 @@ func (m Model) handleThreadKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = "GitHub does not allow you to change this thread's resolution"
 			return m, nil
 		}
-		m.follow.busy = true
+		req := reqResolve(t.ID)
+		if !m.requests.start(req) {
+			return m, nil
+		}
 		client := m.src.Client
 		return m, func() tea.Msg {
 			err := client.SetThreadResolved(t.GraphQLID, !t.Resolved)
-			return threadActionMsg{id: t.ID, resolved: !t.Resolved, err: err}
+			return threadActionMsg{req: req, id: t.ID, resolved: !t.Resolved, err: err}
 		}
 	}
 	return m, nil
@@ -196,6 +171,7 @@ func (m Model) verifyThread() (tea.Model, tea.Cmd) {
 }
 
 type threadActionMsg struct {
+	req      string
 	id       string
 	reply    *ghsrc.Comment
 	resolved bool
@@ -203,38 +179,25 @@ type threadActionMsg struct {
 }
 
 func (m Model) applyThreadAction(msg threadActionMsg) (tea.Model, tea.Cmd) {
-	m.follow.busy = false
+	m.requests.done(msg.req)
+	if msg.reply != nil {
+		return m.applyReply(msg)
+	}
 	if msg.err != nil {
 		m.err = msg.err.Error()
 		return m, nil
 	}
-	for i := range m.follow.threads {
-		if m.follow.threads[i].ID != msg.id {
-			continue
-		}
-		if msg.reply != nil {
-			m.follow.threads[i].Comments = append(m.follow.threads[i].Comments, *msg.reply)
-			m.in.stop()
-			m.mode = modeThread
-			m.status = "reply posted to GitHub"
-		} else {
-			m.follow.threads[i].Resolved = msg.resolved
-			// A successful mutation grants the inverse operation for this local
-			// snapshot; a later server permission change still fails explicitly.
-			m.follow.threads[i].ViewerCanResolve = true
-			m.follow.threads[i].ViewerCanUnresolve = true
-			m.status = "thread reopened on GitHub"
-			if msg.resolved {
-				m.status = "thread resolved on GitHub; still visible for verification"
-			}
-		}
-		for j := range m.follow.session.Threads {
-			if m.follow.session.Threads[j].ID == msg.id {
-				m.follow.session.Threads[j] = m.follow.threads[i]
-			}
-		}
+	m.updateThread(msg.id, func(t *ghsrc.Thread) {
+		t.Resolved = msg.resolved
+		// A successful mutation grants the inverse operation for this local
+		// snapshot; a later server permission change still fails explicitly.
+		t.ViewerCanResolve = true
+		t.ViewerCanUnresolve = true
+	})
+	m.status = "thread reopened on GitHub"
+	if msg.resolved {
+		m.status = "thread resolved on GitHub; still visible for verification"
 	}
-	m.threads = m.follow.session.Threads
 	m.rebuild()
 	return m, nil
 }
@@ -413,9 +376,9 @@ func (m Model) followupView() string {
 		}
 	}
 	left := fmt.Sprintf(" %d/%d threads verified", verified, len(m.follow.threads))
-	if m.sync.syncing {
+	if m.requests.has(reqSync) {
 		left = " refreshing…"
-	} else if m.follow.busy {
+	} else if m.requests.mutating() {
 		left = " updating GitHub…"
 	} else if m.sync.err != "" {
 		left = " sync failed: " + m.sync.err

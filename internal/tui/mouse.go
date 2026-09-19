@@ -48,7 +48,7 @@ const hStep = 8
 // show a list or a document. Screens being typed into ignore it, and so does
 // everything while a GitHub mutation is in flight.
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	if m.follow.busy {
+	if m.requests.mutating() {
 		return m, nil
 	}
 	switch m.mode {

@@ -33,8 +33,9 @@ type QueueModel struct {
 	items   []ghsrc.QueueItem
 	drafts  map[string]int // "repo#number" -> unsent notes
 	fetched time.Time
-	loading bool
-	err     string
+	// requests are the list fetches running, one per filter.
+	requests inflight
+	err      string
 	// notice is a failure that is not the list's, such as a pull request
 	// that would not open. It lasts until the next key.
 	notice string
@@ -53,8 +54,8 @@ func NewQueue(client ghsrc.Client, theme render.Theme, limit int) QueueModel {
 		filter: ghsrc.FilterReviewRequested,
 		drafts: map[string]int{},
 		width:  80, height: 24,
-		loading: true,
-		now:     time.Now,
+		requests: inflight{},
+		now:      time.Now,
 	}
 }
 
@@ -67,7 +68,16 @@ type queueLoadedMsg struct {
 
 func (m QueueModel) Init() tea.Cmd { return m.load(false) }
 
+// loading reports whether the list on screen is being fetched.
+func (m QueueModel) loading() bool { return m.requests.has(reqQueue(m.filter)) }
+
+// load fetches the list for the current filter, unless that fetch is already
+// running. The request set is a map shared by every copy of the model, which
+// is what lets Init, with no model to return, record the fetch it starts.
 func (m QueueModel) load(force bool) tea.Cmd {
+	if !m.requests.start(reqQueue(m.filter)) {
+		return nil
+	}
 	fetch, filter, limit := m.fetch, m.filter, m.limit
 	return func() tea.Msg {
 		items, fetched, err := fetch(filter, limit, force)
@@ -82,7 +92,7 @@ func (m QueueModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case queueLoadedMsg:
-		m.loading = false
+		m.requests.done(reqQueue(msg.filter))
 		// A late reply for a filter the user has already switched away from
 		// would otherwise overwrite the list they are looking at.
 		if msg.filter != m.filter {
@@ -163,7 +173,6 @@ func (m QueueModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "G", "end":
 		m.cursor = maxInt(0, len(m.items)-1)
 	case "r":
-		m.loading = true
 		return m, m.load(true)
 	case "t", "tab":
 		if m.filter == ghsrc.FilterReviewRequested {
@@ -171,7 +180,7 @@ func (m QueueModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.filter = ghsrc.FilterReviewRequested
 		}
-		m.cursor, m.loading = 0, true
+		m.cursor = 0
 		return m, m.load(false)
 	case "L":
 		// The loading page with nothing loading, to look at the animations.
@@ -226,7 +235,7 @@ func (m QueueModel) View() string {
 	surface := lipgloss.NewStyle().Background(lipgloss.Color(t.Bg)).
 		Foreground(lipgloss.Color(t.Fg))
 	title := fmt.Sprintf(" review queue — %s", m.filter.Label())
-	if m.loading {
+	if m.loading() {
 		title += "  ·  loading…"
 	} else if !m.fetched.IsZero() {
 		title += fmt.Sprintf("  ·  updated %s ago", shortAge(time.Since(m.fetched)))
@@ -238,7 +247,7 @@ func (m QueueModel) View() string {
 	case m.err != "" && len(m.items) == 0:
 		b.WriteString(surface.Render(pad("", m.width)) + "\n")
 		b.WriteString(m.message(t.DelSign, m.err) + "\n")
-	case m.loading && len(m.items) == 0:
+	case m.loading() && len(m.items) == 0:
 		b.WriteString(surface.Render(pad("", m.width)) + "\n")
 		b.WriteString(m.message(t.Dim, "loading…") + "\n")
 	case len(m.items) == 0:

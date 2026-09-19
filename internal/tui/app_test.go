@@ -175,7 +175,7 @@ func TestAppDropsMessagesFromALeftReview(t *testing.T) {
 func TestAppQWaitsForGitHubBeforeLeaving(t *testing.T) {
 	a := newApp(t, openerFor(t, nil))
 	a, _ = pressA(t, a, "enter")
-	a.review.follow.busy = true
+	a.review.requests.start(reqResolve("t1"))
 
 	a, quit := pressA(t, a, "q")
 	if quit || a.screen != screenReview {
@@ -367,7 +367,7 @@ func TestAppCtrlCQuitsWhileSubmitting(t *testing.T) {
 	a := newApp(t, openerFor(t, nil))
 	a, _ = pressA(t, a, "enter")
 	a.review.mode = modeSubmit
-	a.review.submit.sending = true
+	a.review.requests.start(reqSubmit)
 
 	if _, quit := pressA(t, a, "ctrl+c"); !quit {
 		t.Error("a hung submit made the program impossible to leave")

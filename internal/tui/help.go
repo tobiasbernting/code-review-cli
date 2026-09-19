@@ -47,11 +47,12 @@ var helpContent = []helpSection{
 	}},
 	{title: "Comment", entries: []helpEntry{
 		{keys: "c", desc: "draft a comment on this line or the selection"},
+		{keys: "c on a thread", desc: "reply; enter posts it to GitHub at once"},
 		{keys: "v", desc: "start or clear a selection"},
 		{keys: "e", desc: "edit the draft under the cursor"},
 		{keys: "d", desc: "delete the draft under the cursor"},
 		{keys: "m", desc: "re-anchor a draft whose line moved"},
-		{keys: "ctrl+e", desc: "while typing: finish in $EDITOR"},
+		{keys: "ctrl+e", desc: "while typing a draft or reply: finish in $EDITOR"},
 	}},
 	{title: "Select & copy", entries: []helpEntry{
 		{keys: "v", desc: "start or clear a selection, then move"},
@@ -87,6 +88,7 @@ var helpContent = []helpSection{
 	}},
 	{title: "Recipes", entries: []helpEntry{
 		{keys: "comment on lines", desc: "v, move, then c"},
+		{keys: "answer a thread", desc: "move onto it, c, type, enter"},
 		{keys: "code into a chat", desc: "select, then y; Y for where it is"},
 		{keys: "file by file", desc: "x as each file is done; f shows what is left"},
 		{keys: "your threads", desc: "t, enter, then x verify, c reply, R resolve", only: inFollowUp},

@@ -14,7 +14,6 @@ import (
 )
 
 type syncState struct {
-	syncing  bool
 	syncedAt time.Time
 	failedAt time.Time
 	err      string
@@ -38,11 +37,10 @@ func (m Model) startSync(submitted []notes.Note) (tea.Model, tea.Cmd) {
 		m.err = "sync is available only for pull requests"
 		return m, nil
 	}
-	if m.sync.syncing {
+	if !m.requests.start(reqSync) {
 		m.status = "sync already in progress"
 		return m, nil
 	}
-	m.sync.syncing = true
 	m.sync.err = ""
 	src := m.src
 	return m, func() tea.Msg {
@@ -74,7 +72,7 @@ type syncChanges struct {
 }
 
 func (m Model) applySyncResult(msg syncResultMsg) (tea.Model, tea.Cmd) {
-	m.sync.syncing = false
+	m.requests.done(reqSync)
 	if msg.err != nil {
 		m.sync.failedAt = time.Now()
 		m.sync.err = msg.err.Error()

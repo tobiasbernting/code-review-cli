@@ -46,7 +46,7 @@ func TestCleanApprovalSubmitsPinnedReview(t *testing.T) {
 	m = press(t, m, "a")
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
-	if cmd == nil || !m.submit.sending {
+	if cmd == nil || !m.requests.has(reqSubmit) {
 		t.Fatalf("clean approval did not start: %s", m.err)
 	}
 	next, _ = m.Update(cmd())
@@ -79,7 +79,7 @@ func TestEmptyCommentAndRequestChangesAreRejectedLocally(t *testing.T) {
 			m = press(t, m, eventKey)
 			next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 			m = next.(Model)
-			if cmd != nil || m.submit.sending || m.err == "" {
+			if cmd != nil || m.requests.has(reqSubmit) || m.err == "" {
 				t.Fatalf("empty review was not refused locally: %+v", m.submit)
 			}
 			if _, err := os.Stat(payloadPath); !os.IsNotExist(err) {

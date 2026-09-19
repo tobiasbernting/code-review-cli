@@ -155,7 +155,6 @@ func TestQueueSelectionIsVisibleInEveryTheme(t *testing.T) {
 		theme, _ := render.ThemeByName(name)
 		q := NewQueue(ghsrc.Client{}, theme, 30)
 		q.width, q.height = 100, 12
-		q.loading = false
 		q.items = []ghsrc.QueueItem{
 			{Repo: "acme/api", Number: 7, Title: "tighten the upload limit", Author: "robin",
 				Checks: "SUCCESS", UpdatedAt: time.Now().Add(-3 * time.Hour)},

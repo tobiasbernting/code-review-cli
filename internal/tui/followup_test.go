@@ -272,7 +272,7 @@ func followupSync(s *followup.Session) syncResultMsg {
 func TestFollowupRefreshFailureKeepsSnapshotAndReportsError(t *testing.T) {
 	m := followupModel(t)
 	before := m.follow.session
-	m.sync.syncing = true
+	m.requests.start(reqSync)
 	next, _ := m.Update(syncResultMsg{err: fmt.Errorf("offline")})
 	m = next.(Model)
 	if m.follow.session != before || !strings.Contains(m.View(), "sync failed: offline") {
