@@ -147,6 +147,7 @@ func (m Model) applySyncResult(msg syncResultMsg) (tea.Model, tea.Cmd) {
 	m.changesView = false
 	m.rangeAnchor, m.rangeAnchorPath = 0, ""
 	m.reanchor = reanchorState{}
+	m.resetGaps()
 	m.sync.syncedAt = msg.snapshot.FetchedAt
 	m.sync.failedAt = time.Time{}
 	m.sync.err = ""

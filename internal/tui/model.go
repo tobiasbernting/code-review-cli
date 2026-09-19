@@ -67,6 +67,11 @@ type Model struct {
 	// can be detached for re-anchoring without re-reading the file.
 	blobs map[string]string
 
+	// gaps is how far each Gap is open; headText keeps a pull request's
+	// file text read for them.
+	gaps     gapState
+	headText *textCache
+
 	threads         []ghsrc.Thread
 	expandedThreads map[string]bool
 	newComments     map[int64]bool
@@ -78,6 +83,9 @@ type Model struct {
 	cursor  int
 	top     int
 	hoffset int
+	// arrived is the way the cursor last moved onto its row: 1 down from
+	// above, -1 up from below. A Gap opens toward it.
+	arrived int
 
 	fileCursor int
 	status     string
@@ -145,6 +153,8 @@ func New(opts Options) Model {
 		now:             time.Now,
 		clip:            opts.Clipboard,
 		requests:        inflight{},
+		gaps:            newGapState(0),
+		headText:        &textCache{text: map[string]string{}},
 	}
 	m.sync.syncedAt = opts.SyncedAt
 	m.sync.err = opts.SyncError
@@ -177,6 +187,7 @@ type documentAnchor struct {
 	rowKind        render.RowKind
 	annotationKind render.AnnotationKind
 	id             string
+	gap            int // the Gap's Index, on a Gap row
 }
 
 func (m Model) cursorAnchor() documentAnchor {
@@ -197,6 +208,9 @@ func (m Model) cursorAnchor() documentAnchor {
 			if row.IsCode() {
 				anchor.line, anchor.oldLine = row.NewNum(), row.Line.OldNum
 			}
+		}
+		if row.Gap != nil {
+			anchor.gap = row.Gap.Index
 		}
 	}
 	return anchor
@@ -244,6 +258,9 @@ func (m *Model) rebuildAt(anchor documentAnchor) {
 		if row.Kind != anchor.rowKind || row.FileIdx >= len(m.files) {
 			continue
 		}
+		if row.Gap != nil && row.Gap.Index != anchor.gap {
+			continue
+		}
 		if m.files[row.FileIdx].Path() == anchor.path && row.Line.NewNum == anchor.line {
 			m.cursor = i
 			m.clampScroll()
@@ -257,18 +274,30 @@ func (m *Model) rebuildAt(anchor documentAnchor) {
 }
 
 func (m *Model) overlay() render.Overlay {
-	if m.changesView {
-		return render.Overlay{}
+	var ov render.Overlay
+	if !m.changesView {
+		ov = Overlay(m.review, m.threads, m.files, OverlayOptions{
+			Expanded: m.expandedThreads, NewComments: m.newComments,
+			UpdatedComments: m.updatedComments,
+		})
 	}
-	return Overlay(m.review, m.threads, m.files, OverlayOptions{
-		Expanded: m.expandedThreads, NewComments: m.newComments,
-		UpdatedComments: m.updatedComments,
-	})
+	ov.Expansion = m.gaps.expansion
+	return ov
 }
 
 func (m Model) Init() tea.Cmd { return tickSyncAge() }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	if m, ok := next.(Model); ok {
+		if read := m.prefetchGaps(); read != nil {
+			return m, tea.Batch(cmd, read)
+		}
+	}
+	return next, cmd
+}
+
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -297,6 +326,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applyHeadFile(msg)
 	case launchedMsg:
 		return m.applyLaunched(msg)
+	case gapTextMsg:
+		return m.applyGapText(msg)
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	case tea.MouseMsg:
@@ -412,7 +443,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "P":
 		m.jumpActivity(-1)
 	case "enter":
+		if m.onGap() {
+			return m.expandGap(false)
+		}
 		return m.openOrToggleComment()
+	case "shift+enter", "alt+enter":
+		// Most terminals send shift+enter as a plain enter; alt+enter is the
+		// spelling that gets through where it does not.
+		if m.onGap() {
+			return m.expandGap(true)
+		}
 
 	// review actions
 	case "c":
@@ -521,6 +561,7 @@ func (m *Model) moveCursor(delta int) {
 		dir = -1
 	}
 	m.cursor = m.nextSelectable(target, dir)
+	m.arrived = dir
 	m.clampScroll()
 	m.visitCurrentThread()
 }
@@ -882,7 +923,7 @@ func (m Model) leave(key string) (tea.Model, tea.Cmd) {
 func ownMsg(msg tea.Msg) bool {
 	switch msg.(type) {
 	case backMsg, submitResultMsg, threadActionMsg, threadContextMsg,
-		syncResultMsg, syncTickMsg, yankedMsg, headFileMsg, launchedMsg:
+		syncResultMsg, syncTickMsg, yankedMsg, headFileMsg, launchedMsg, gapTextMsg:
 		return true
 	}
 	return false

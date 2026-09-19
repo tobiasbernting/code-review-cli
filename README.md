@@ -87,6 +87,8 @@ hides them.
 | `r` | sync the current pull request |
 | `N` / `P` | next / previous thread with new activity |
 | `enter` | expand a thread or open a comment |
+| `enter` on `⋯` | show 20 more of the unchanged lines the diff leaves out |
+| `shift+enter` on `⋯` | show the whole gap (`alt+enter` where the terminal sends shift+enter as enter) |
 | `?` | every key, grouped, with a few recipes |
 | `q` | quit, or back to the queue when opened from it |
 | `ctrl+c` | quit |
@@ -118,7 +120,8 @@ terminal sets its sections side by side.
 The wheel scrolls; the cursor stays put unless it would leave the screen.
 `shift`+wheel scrolls sideways. A click moves the cursor, a double click does
 what `enter` does, and a drag selects lines for a comment or a copy — within
-one hunk, scrolling when it reaches the edge. The file list, the thread list
+one hunk, scrolling when it reaches the edge. A single click on a `⋯` row
+already shows more of it. The file list, the thread list
 and the queue select on click and open on double click; in a thread, a comment
 or help, the wheel scrolls what you are reading.
 

@@ -228,6 +228,11 @@ type Source struct {
 	// 422, so it is worth catching before the request is made.
 	Author string
 	Viewer string
+
+	// FileText reads a file's new side for a local review, to show a Gap:
+	// the working-tree file for `krv .`, the file at B for `krv A..B`. A pull
+	// request's is read from GitHub at HeadSHA instead, so it leaves this nil.
+	FileText func(path string) ([]byte, error)
 }
 
 // OwnPR reports whether you are the author of the pull request under review.

@@ -163,11 +163,31 @@ func (m Model) clickDiff(y int) (tea.Model, tea.Cmd) {
 	}
 	// A plain click starts over, as in any editor: the old selection goes.
 	m.clearSelection()
+	from := m.cursor
 	m.cursor = m.nextSelectable(row, 1)
+	m.arrived = 1
+	if m.cursor < from {
+		m.arrived = -1
+	}
 	m.clampScroll()
 	m.visitCurrentThread()
 	m.drag = dragState{held: true, origin: m.cursor}
-	if m.lastPress.double(int(m.mode), m.cursor, m.now()) {
+	double := m.lastPress.double(int(m.mode), m.cursor, m.now())
+	if m.onGap() {
+		// A click opens a Gap, and a double click is a click that has
+		// already opened it once.
+		if double {
+			return m, nil
+		}
+		next, cmd := m.expandGap(false)
+		m = next.(Model)
+		// The row can move down as lines open above it; a second press on
+		// it still makes this click a double.
+		m.lastPress.row = m.cursor
+		m.drag.origin = m.cursor
+		return m, cmd
+	}
+	if double {
 		return m.openOrToggleComment()
 	}
 	return m, nil
@@ -223,7 +243,7 @@ func (m Model) clampToHunk(origin, row, dir int) int {
 	last := origin
 	for i := origin; i >= 0 && i < len(m.doc.Rows); i += dir {
 		r := m.doc.Rows[i]
-		if r.FileIdx != o.FileIdx || (r.IsCode() && r.HunkIdx != o.HunkIdx) || r.Kind == render.RowHunk || r.Kind == render.RowFile {
+		if r.FileIdx != o.FileIdx || (r.IsCode() && r.HunkIdx != o.HunkIdx) || r.Kind == render.RowHunk || r.Kind == render.RowFile || r.Kind == render.RowGap {
 			break
 		}
 		if r.IsCode() {

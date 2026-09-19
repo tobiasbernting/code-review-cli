@@ -216,6 +216,7 @@ func (m Model) showChanges() (tea.Model, tea.Cmd) {
 	}
 	m.files = diffparse.Parse(s.Comparison.Diff)
 	diffparse.FillStats(m.files)
+	m.resetGaps()
 	m.mode, m.changesView = modeDiff, true
 	m.doc = nil
 	m.cursor, m.top, m.hoffset, m.fileCursor = 0, 0, 0, 0
@@ -234,6 +235,7 @@ func (m *Model) showCurrentDiff(path string) {
 		}
 	}
 	m.files = m.follow.session.Files
+	m.resetGaps()
 	m.mode, m.changesView = modeDiff, false
 	m.doc = nil
 	m.cursor, m.top, m.fileCursor = 0, 0, 0

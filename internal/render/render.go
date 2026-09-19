@@ -72,6 +72,7 @@ const (
 	RowSection
 	RowSpacer
 	RowPair // split layout: an old line and a new line side by side
+	RowGap  // unchanged lines the diff leaves out: ⋯ 42 unchanged lines
 )
 
 // Density is how much breathing room the document gets. It buys hierarchy —
@@ -179,6 +180,13 @@ type Row struct {
 	Ann  *Annotation
 	Cont bool
 
+	// Gap is what a RowGap still leaves out: the lines of its Gap not yet
+	// shown. Expanded marks a code row showing a line of a Gap rather than of
+	// a hunk; it belongs to no hunk, so its HunkIdx is -1, and nothing can be
+	// anchored to it.
+	Gap      *Gap
+	Expanded bool
+
 	// Reviewed and Changed decorate a file header.
 	Reviewed  bool
 	Changed   bool
@@ -235,10 +243,13 @@ func Build(files []*diffparse.FileDiff, h *Highlighter, ov Overlay, layout Layou
 			continue
 		}
 
+		gaps := ov.gaps(f)
 		for hi, hunk := range f.Hunks() {
 			// A rule between hunks, but not between a file header and the
-			// hunk it introduces: they belong together.
-			if roomy && hi > 0 {
+			// hunk it introduces: they belong together. A Gap between them
+			// separates them already, and a blank line among its lines would
+			// read as one the file does not have.
+			if !d.gap(fi, gaps, hi) && roomy && hi > 0 {
 				d.Rows = append(d.Rows, Row{Kind: RowSpacer, FileIdx: fi, HunkIdx: hi})
 			}
 			d.HunkRows = append(d.HunkRows, len(d.Rows))
@@ -274,6 +285,7 @@ func Build(files []*diffparse.FileDiff, h *Highlighter, ov Overlay, layout Layou
 				d.annotate(ov, f.Path(), fi, hi, ln.NewNum, roomy && li < len(hunk.Lines)-1)
 			}
 		}
+		d.gap(fi, gaps, len(f.Hunks()))
 		d.Rows = append(d.Rows, Row{Kind: RowSpacer, FileIdx: fi, HunkIdx: -1})
 	}
 	// Annotations whose file is not in this diff at all still have to be
@@ -545,6 +557,7 @@ type rowTones struct {
 	wordBg  string
 	numFg   string
 	numBold bool
+	codeFg  string // set to paint the code in one colour instead of its syntax
 }
 
 func (r *Renderer) tones(kind diffparse.LineKind, focus bool) rowTones {
@@ -604,6 +617,8 @@ func (r *Renderer) Render(row Row, width, hoffset int, cursor bool) string {
 		return r.hunkRow(row, width, cursor)
 	case RowPair:
 		return r.pairRow(row, width, hoffset, cursor)
+	case RowGap:
+		return r.gapRow(row, width, cursor)
 	case RowSpacer:
 		// Painted, not empty: a blank line left to the terminal's own colours
 		// would stripe the theme's surface.
@@ -615,6 +630,9 @@ func (r *Renderer) Render(row Row, width, hoffset int, cursor bool) string {
 func (r *Renderer) codeRow(row Row, width, hoffset int, cursor bool) string {
 	t := r.Theme
 	tn := r.tones(row.Line.Kind, cursor)
+	if row.Expanded {
+		tn.codeFg = t.Dim
+	}
 
 	var b strings.Builder
 	b.WriteString(r.style(tn.edgeFg, tn.gutter).Render(tn.edge))
@@ -664,6 +682,9 @@ func (r *Renderer) code(segs []Segment, marks []span, width, hoffset int, tn row
 	}
 	keyFor := func(c cell) styleKey {
 		key := styleKey{fg: r.syntaxFg(c.fg, c.emph), bg: tn.bg}
+		if tn.codeFg != "" {
+			key.fg = tn.codeFg
+		}
 		if c.mark && tn.wordBg != "" {
 			key.bg = tn.wordBg
 			key.underline = r.Theme.MarkUnderline

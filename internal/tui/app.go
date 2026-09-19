@@ -126,14 +126,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		msg.opts.FromQueue = true
 		a.review = New(msg.opts)
 		a.screen = screenReview
-		next, _ := a.review.Update(tea.WindowSizeMsg{Width: a.width, Height: a.height})
+		next, sized := a.review.Update(tea.WindowSizeMsg{Width: a.width, Height: a.height})
 		a.review = next.(Model)
 		if a.sinceReview {
 			// Without a comparison this stays on the threads and says why.
 			next, _ = a.review.showChanges()
 			a.review = next.(Model)
 		}
-		return a, a.tag(a.review.Init())
+		return a, tea.Batch(a.tag(sized), a.tag(a.review.Init()))
 	}
 
 	switch a.screen {
@@ -206,6 +206,15 @@ func (a App) tag(cmd tea.Cmd) tea.Cmd {
 	gen := a.gen
 	return func() tea.Msg {
 		msg := cmd()
+		// A batch is run by the program, so each of its commands is
+		// stamped on its own.
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			tagged := make(tea.BatchMsg, len(batch))
+			for i, c := range batch {
+				tagged[i] = a.tag(c)
+			}
+			return tagged
+		}
 		if ownMsg(msg) {
 			return reviewMsg{gen: gen, msg: msg}
 		}

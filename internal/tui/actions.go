@@ -13,7 +13,8 @@ import (
 
 // cursorLine is the file, new-side line and hunk the cursor sits on, or
 // ok=false when the cursor is not on a commentable line. Deleted lines are
-// excluded: only the RIGHT side is written today.
+// excluded: only the RIGHT side is written today. So are a Gap's lines, which
+// are outside the diff GitHub anchors comments to.
 func (m Model) cursorLine() (path string, line, hunk int, ok bool) {
 	if m.cursor >= len(m.doc.Rows) {
 		return "", 0, -1, false
@@ -26,7 +27,7 @@ func (m Model) cursorLine() (path string, line, hunk int, ok bool) {
 
 	switch row.Kind {
 	case render.RowCode, render.RowPair:
-		if row.NewNum() == 0 {
+		if row.NewNum() == 0 || row.Expanded {
 			return path, 0, row.HunkIdx, false
 		}
 		return path, row.NewNum(), row.HunkIdx, true
@@ -56,6 +57,9 @@ func (m Model) startComment() (tea.Model, tea.Cmd) {
 func (m Model) draftAnchor() (path string, start, line, hunk int, err string) {
 	if m.changesView {
 		return "", 0, 0, -1, "press D for the current PR diff before editing draft anchors"
+	}
+	if m.outsideDiff() {
+		return "", 0, 0, -1, "can't comment outside the diff"
 	}
 	path, line, hunk, ok := m.cursorLine()
 	if !ok {
@@ -88,6 +92,16 @@ func draftPrompt(what string, start, line int) string {
 	return fmt.Sprintf("%s L%d ›", what, line)
 }
 
+// outsideDiff reports whether the cursor is in a Gap: on its row or on a
+// line it shows. Those lines are read-only.
+func (m Model) outsideDiff() bool {
+	if m.cursor < 0 || m.cursor >= len(m.doc.Rows) {
+		return false
+	}
+	row := m.doc.Rows[m.cursor]
+	return row.Expanded || row.Kind == render.RowGap
+}
+
 func (m *Model) clearSelection() {
 	m.rangeAnchor, m.rangeAnchorPath, m.rangeAnchorHunk = 0, "", -1
 }
@@ -100,6 +114,10 @@ func (m Model) toggleRangeAnchor() (tea.Model, tea.Cmd) {
 	if m.rangeAnchor > 0 {
 		m.clearSelection()
 		m.status = "selection cleared"
+		return m, nil
+	}
+	if m.outsideDiff() {
+		m.err = "can't select outside the diff"
 		return m, nil
 	}
 	path, line, hunk, ok := m.cursorLine()

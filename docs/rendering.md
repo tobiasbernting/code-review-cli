@@ -84,6 +84,7 @@ replaced the tint would answer "where am I?" by erasing "what is this?".
 | `RowSection` | heads a group of annotations that no longer anchor to a line |
 | `RowSpacer` | blank; navigation skips it |
 | `RowPair` | split layout only: an old line and a new line side by side (below) |
+| `RowGap` | the unchanged lines a diff leaves out: `⋯ 42 unchanged lines` ([Gaps](#gaps)) |
 
 ## Split layout
 
@@ -127,6 +128,43 @@ pane's gutter in split, which is where annotations indent to.
 `Document.LineRow(fileIdx, newNum, oldNum)` finds the row showing a line in
 either mode — new-side number first, old-side as the fallback — which is how a
 view keeps its cursor on the same line across a mode switch.
+
+## Gaps
+
+A **Gap** is a run of unchanged lines the diff does not show: before the first
+hunk, between two, or after the last. `Gaps(file, newLines)` finds them from
+the hunk headers alone, numbered on both sides; the one after the last hunk
+needs the file's length, so it is left out until the file has been read.
+`MayContinue` says whether a file could have one at all — a last line followed
+by `\ No newline at end of file` settles that it cannot.
+
+Every Gap gets a row, in the gutter's colours so it reads as margin rather
+than as a line of the file:
+
+```
+    3 │   4   three
+      │     ⋯ 7 unchanged lines
+  old │ new   (the next hunk's header)
+```
+
+The `⋯` sits in the sign column and the count where code starts. A Gap between
+two hunks takes the place of the spacer comfortable density would put there:
+it separates them already, and a blank line among its lines would read as one
+the file does not have.
+
+Opening a Gap is `Overlay.Expansion`: the file's new-side text and, per Gap,
+how many lines are shown from its top (after the hunk above) and from its
+bottom (before the hunk below). `Build` draws the top lines, a `RowGap` for
+what is still hidden, then the bottom lines; a Gap shown whole has no row.
+
+An expanded line is a `RowCode` (or a `RowPair`, the same line on both panes)
+with `Expanded` set: an unchanged line, both sides numbered, the old number
+following from the hunk offsets. It is painted in `Dim` instead of its syntax,
+so what the diff changed still wins the page, and its `HunkIdx` is `-1`:
+nothing anchors to it, and a Selection stops at it.
+
+Gap rows only appear when the overlay supplies `Expansion`. Piped output has
+no way to open one, so it prints the diff as git does.
 
 ## Themes
 
@@ -188,8 +226,9 @@ of its own.
 ## Density
 
 `Layout.Density` is the structural half of presentation. `comfortable` (the
-default) inserts a spacer before every hunk but the first in a file, and after
-a group of annotations, so hierarchy gets air and nothing else does; `compact`
+default) inserts a spacer before every hunk but the first in a file — unless a
+drawn [Gap](#gaps) sits between them — and after a group of annotations, so
+hierarchy gets air and nothing else does; `compact`
 gives every line of the terminal to the diff. It changes only how many
 `RowSpacer` rows exist — `TestComfortableDensitySeparatesHunksNotLines` pins
 that it never changes how many code rows there are.

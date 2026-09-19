@@ -458,14 +458,14 @@ func resolve(repo *gitsrc.Repo, cfg config.Config, target string) (tui.Source, [
 
 	if target == "" || target == "." {
 		files, err := repo.WorkingTree(cfg.Untracked)
-		return tui.Source{Kind: tui.SourceLocal, Title: "working tree", Root: repo.Root}, files, err
+		return tui.Source{Kind: tui.SourceLocal, Title: "working tree", Root: repo.Root, FileText: repo.NewSide("")}, files, err
 	}
 	files, err := repo.Range(target)
 	if err != nil {
 		return tui.Source{}, nil, err
 	}
 	head, err := repo.RangeHead(target)
-	return tui.Source{Kind: tui.SourceLocal, Title: target, Root: repo.Root, Rev: head}, files, err
+	return tui.Source{Kind: tui.SourceLocal, Title: target, Root: repo.Root, Rev: head, FileText: repo.NewSide(target)}, files, err
 }
 
 func resolvePR(repo *gitsrc.Repo, cfg config.Config, number int) (tui.Source, []*diffparse.FileDiff, error) {
