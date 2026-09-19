@@ -116,6 +116,25 @@ func TestOldQueueCacheDecodes(t *testing.T) {
 	}
 }
 
+func TestNewSinceReview(t *testing.T) {
+	cases := []struct {
+		name string
+		item QueueItem
+		want bool
+	}{
+		{"never reviewed", QueueItem{HeadSHA: "bbbb"}, false},
+		{"reviewed the head", QueueItem{HeadSHA: "bbbb", ReviewedSHA: "bbbb"}, false},
+		{"commits since", QueueItem{HeadSHA: "bbbb", ReviewedSHA: "aaaa"}, true},
+		// An old cache entry knows neither, and must not guess.
+		{"head unknown", QueueItem{ReviewedSHA: "aaaa"}, false},
+	}
+	for _, tc := range cases {
+		if got := tc.item.NewSinceReview(); got != tc.want {
+			t.Errorf("%s: NewSinceReview = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestParseQueueRejectsGarbage(t *testing.T) {
 	if _, err := parseQueue("not json"); err == nil {
 		t.Error("expected an error for malformed output")

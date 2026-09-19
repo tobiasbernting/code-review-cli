@@ -50,6 +50,12 @@ type QueueItem struct {
 	ReviewedSHA string
 }
 
+// NewSinceReview reports whether the pull request has moved on from the
+// commit you last reviewed. Never having reviewed it is not new commits.
+func (q QueueItem) NewSinceReview() bool {
+	return q.ReviewedSHA != "" && q.HeadSHA != "" && q.ReviewedSHA != q.HeadSHA
+}
+
 // Age is a compact "how long since this last moved".
 func (q QueueItem) Age() string {
 	d := time.Since(q.UpdatedAt)
