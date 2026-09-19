@@ -85,6 +85,7 @@ Reviewing:
 | key | action |
 | --- | --- |
 | `c` | draft a comment on this line or the selection; on a thread, reply |
+| `C` | suggest a change to this line or the selection |
 | `v` | start or clear a selection, then move and press `c` or `y` |
 | `e` / `d` | edit / delete the draft under the cursor |
 | `m` | move a detached draft to a new line or range |
@@ -232,6 +233,13 @@ every draft is posted as a single review with one event — comment, approve, or
 request changes — rather than as a stream of separate comments. Once submitted,
 the local copies are dropped: GitHub owns them from then on, which is what stops
 two versions of the same review from disagreeing.
+
+`C` starts a suggestion: a draft that opens on a ` ```suggestion ` block
+holding the line or selection as it reads after the change, for the author to
+commit from GitHub. Edit the code in the block (`ctrl+e` for more room) and
+press `enter`. Only new lines can be replaced, so a deleted line is refused and
+a selection that spans one leaves it out. Once saved, a suggestion is an
+ordinary draft.
 
 For a local review with no pull request to post to, `krv --export markdown`
 prints the drafts for pasting wherever they need to go.

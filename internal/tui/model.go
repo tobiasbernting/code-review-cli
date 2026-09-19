@@ -118,6 +118,12 @@ type pendingNote struct {
 	startLine int
 	line      int
 	editingID string
+
+	// suggesting marks a suggestion, and suggestion is the code it started
+	// from, so saving it unchanged can be caught. warned is set once it was.
+	suggesting bool
+	suggestion string
+	warned     bool
 }
 
 func New(opts Options) Model {
@@ -410,6 +416,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.startReply(id)
 		}
 		return m.startComment()
+	case "C":
+		return m.startSuggestion()
 	case "v":
 		return m.toggleRangeAnchor()
 	case "y":

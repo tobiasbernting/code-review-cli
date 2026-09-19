@@ -95,6 +95,10 @@ func (i input) render(width int, promptFg, bg string) string {
 	if i.cursor < len(r) {
 		at, after = string(r[i.cursor]), string(r[i.cursor+1:])
 	}
+	// The composer is one row: a line break, as in a suggestion, is marked
+	// rather than drawn.
+	breaks := strings.NewReplacer("\n", "⏎")
+	before, at, after = breaks.Replace(before), breaks.Replace(at), breaks.Replace(after)
 
 	base := lipgloss.NewStyle().Background(lipgloss.Color(bg))
 	line := base.Foreground(lipgloss.Color(promptFg)).Bold(true).Render(" "+i.prompt+" ") +

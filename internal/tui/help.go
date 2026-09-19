@@ -48,6 +48,7 @@ var helpContent = []helpSection{
 	{title: "Comment", entries: []helpEntry{
 		{keys: "c", desc: "draft a comment on this line or the selection"},
 		{keys: "c on a thread", desc: "reply; enter posts it to GitHub at once"},
+		{keys: "C", desc: "suggest a change to this line or the selection"},
 		{keys: "v", desc: "start or clear a selection"},
 		{keys: "e", desc: "edit the draft under the cursor"},
 		{keys: "d", desc: "delete the draft under the cursor"},
@@ -88,6 +89,7 @@ var helpContent = []helpSection{
 	}},
 	{title: "Recipes", entries: []helpEntry{
 		{keys: "comment on lines", desc: "v, move, then c"},
+		{keys: "suggest a fix", desc: "C, edit the code in the block, enter"},
 		{keys: "answer a thread", desc: "move onto it, c, type, enter"},
 		{keys: "code into a chat", desc: "select, then y; Y for where it is"},
 		{keys: "file by file", desc: "x as each file is done; f shows what is left"},
