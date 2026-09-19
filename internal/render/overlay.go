@@ -57,7 +57,25 @@ type Overlay struct {
 	// FileState reports whether a file is marked reviewed, and whether it has
 	// changed since it was marked.
 	FileState func(path string) (reviewed, changed bool)
+
+	// Expansion says how far a file's Gaps are opened. Nil leaves Gaps out
+	// altogether, as piped output does: it has no way to open one.
+	Expansion func(path string) Expansion
 }
+
+// Expansion is how far a file's Gaps are opened, and the text they open onto.
+type Expansion struct {
+	// Text is the file's new side, one entry per line, or nil until it has
+	// been read. Its length is also what tells whether the file goes on after
+	// its last hunk.
+	Text []string
+	// Shown is keyed by Gap.Index.
+	Shown map[int]Shown
+}
+
+// Shown is how many of a Gap's lines are shown at its top, after the hunk
+// above, and at its bottom, before the hunk below.
+type Shown struct{ Top, Bottom int }
 
 func (o Overlay) at(path string, line int) []Annotation {
 	if o.At == nil || line == 0 {

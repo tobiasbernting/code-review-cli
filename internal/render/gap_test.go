@@ -1,9 +1,12 @@
 package render
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/tobiasbernting/krv/v2/internal/diffparse"
 )
 
@@ -100,6 +103,130 @@ func TestNoGapsInWholeFiles(t *testing.T) {
 	for name, diff := range map[string]string{"added": added, "deleted": deleted, "binary": binary} {
 		if got := Gaps(gapFile(t, diff), 50); len(got) != 0 {
 			t.Errorf("%s: Gaps = %+v, want none", name, got)
+		}
+	}
+}
+
+// twenty is the new side of twoHunks' file, one "line N" per line.
+func twenty() []string {
+	lines := make([]string, 20)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line %d", i+1)
+	}
+	return lines
+}
+
+func expanding(exp Expansion) Overlay {
+	return Overlay{Expansion: func(string) Expansion { return exp }}
+}
+
+// Piped output has no way to expand a Gap, so it keeps the diff as git
+// prints it.
+func TestPlainDocumentHasNoGapRows(t *testing.T) {
+	doc := Build(diffparse.Parse(twoHunks), NewHighlighter("", false), Overlay{}, Layout{})
+	for _, row := range doc.Rows {
+		if row.Kind == RowGap {
+			t.Fatalf("plain document has a Gap row: %+v", row)
+		}
+	}
+}
+
+func TestGapRowSaysWhatIsLeftOut(t *testing.T) {
+	doc := Build(diffparse.Parse(twoHunks), NewHighlighter("", false), expanding(Expansion{}), Layout{})
+	r := NewRenderer(DefaultTheme(), doc)
+	var gaps []int
+	for i, row := range doc.Rows {
+		if row.Kind == RowGap {
+			gaps = append(gaps, i)
+		}
+	}
+	if len(gaps) != 1 {
+		t.Fatalf("got %d Gap rows, want 1 between the hunks", len(gaps))
+	}
+	row := doc.Rows[gaps[0]]
+	if row.Gap == nil || row.Gap.Index != 1 || row.HunkIdx != -1 {
+		t.Errorf("Gap row = %+v, want the Gap before hunk 1, in no hunk", row)
+	}
+	if gaps[0] != doc.HunkRows[1]-1 {
+		t.Errorf("Gap row at %d, want it just above hunk 1's header at %d", gaps[0], doc.HunkRows[1])
+	}
+	out := r.Render(row, 60, 0, false)
+	if !strings.Contains(out, "⋯ 7 unchanged lines") {
+		t.Errorf("Gap row = %q, want it to count the lines", out)
+	}
+	if got := lipgloss.Width(out); got != 60 {
+		t.Errorf("Gap row width = %d, want 60", got)
+	}
+	if focused := r.Render(row, 60, 0, true); !strings.HasPrefix(focused, edgeFocus) {
+		t.Errorf("focused Gap row = %q, want the focus bar", focused)
+	}
+}
+
+type shownLine struct{ old, new int }
+
+func expandedLines(doc *Document) (lines []shownLine, gapRows []string) {
+	r := NewRenderer(DefaultTheme(), doc)
+	for _, row := range doc.Rows {
+		switch {
+		case row.Kind == RowGap:
+			gapRows = append(gapRows, strings.TrimSpace(r.Render(row, splitWidth, 0, false)))
+		case row.Expanded && row.Kind == RowPair:
+			lines = append(lines, shownLine{row.Line.OldNum, row.Right.NewNum})
+		case row.Expanded:
+			lines = append(lines, shownLine{row.Line.OldNum, row.Line.NewNum})
+		}
+	}
+	return lines, gapRows
+}
+
+// Lines shown from the top of a Gap follow the hunk above it, lines shown
+// from the bottom lead into the hunk below, and the row keeps count of what
+// is still left out between them. A Gap shown whole has no row.
+func TestExpandedLinesSitInTheirGap(t *testing.T) {
+	exp := Expansion{Text: twenty(), Shown: map[int]Shown{1: {Top: 2, Bottom: 1}, 2: {Top: 20}}}
+	for _, layout := range []Layout{{}, splitLayout} {
+		t.Run(layout.Mode.String(), func(t *testing.T) {
+			doc := Build(diffparse.Parse(twoHunks), NewHighlighter("", false), expanding(exp), layout)
+			lines, gapRows := expandedLines(doc)
+			want := []shownLine{{4, 5}, {5, 6}, {10, 11}, {14, 15}, {15, 16}, {16, 17}, {17, 18}, {18, 19}, {19, 20}}
+			if fmt.Sprint(lines) != fmt.Sprint(want) {
+				t.Errorf("expanded lines = %v, want %v", lines, want)
+			}
+			if len(gapRows) != 1 || !strings.Contains(gapRows[0], "⋯ 4 unchanged lines") {
+				t.Errorf("Gap rows = %q, want one with 4 lines left", gapRows)
+			}
+		})
+	}
+}
+
+// An expanded line is an unchanged line: no marker, no sign, both sides
+// numbered — in split, the same line on both panes.
+func TestExpandedLineReadsAsContext(t *testing.T) {
+	exp := Expansion{Text: twenty(), Shown: map[int]Shown{1: {Top: 1}}}
+	doc := Build(diffparse.Parse(twoHunks), NewHighlighter("", false), expanding(exp), Layout{})
+	r := NewRenderer(DefaultTheme(), doc)
+	for _, row := range doc.Rows {
+		if !row.Expanded {
+			continue
+		}
+		out := r.Render(row, 60, 0, false)
+		if strings.HasPrefix(out, edgeChange) || strings.Contains(out, signAdd) || strings.Contains(out, signDel) {
+			t.Errorf("expanded row reads as a change: %q", out)
+		}
+		if !strings.Contains(out, "4 │   5   line 5") {
+			t.Errorf("expanded row = %q, want old 4, new 5 and the text", out)
+		}
+	}
+
+	doc = Build(diffparse.Parse(twoHunks), NewHighlighter("", false), expanding(exp), splitLayout)
+	r = NewRenderer(DefaultTheme(), doc)
+	for _, row := range doc.Rows {
+		if !row.Expanded {
+			continue
+		}
+		out := r.Render(row, splitWidth, 0, false)
+		if strings.Count(out, "line 5") != 2 {
+			t.Errorf("split expanded row = %q, want the line on both panes", out)
 		}
 	}
 }

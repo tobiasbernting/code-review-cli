@@ -121,17 +121,18 @@ func (r *Renderer) pairRow(row Row, width, hoffset int, cursor bool) string {
 		return r.pad("", width, t.Bg)
 	}
 	var b strings.Builder
-	b.WriteString(r.pane(row.Line, row.Line.OldNum, row.Segs, row.Marks, pw, hoffset, cursor, true))
+	b.WriteString(r.pane(row.Line, row.Line.OldNum, row.Segs, row.Marks, pw, hoffset, cursor, true, row.Expanded))
 	b.WriteString(r.style(t.GutterSep, t.Bg).Render(gutterRule))
-	b.WriteString(r.pane(row.Right, row.Right.NewNum, row.RightSegs, row.RightMarks, pw, hoffset, cursor, false))
+	b.WriteString(r.pane(row.Right, row.Right.NewNum, row.RightSegs, row.RightMarks, pw, hoffset, cursor, false, row.Expanded))
 	return r.pad(b.String(), width, t.Bg)
 }
 
 // pane paints one side of a split row, drawn exactly like a unified row with
 // one number column. n is that side's line number; zero makes the pane filler.
 // Focus lifts both panes' tones, but only the left pane's edge — the row's
-// edge — gives way to the focus bar: the right pane keeps its marker.
-func (r *Renderer) pane(ln diffparse.Line, n int, segs []Segment, marks []span, width, hoffset int, focus, rowEdge bool) string {
+// edge — gives way to the focus bar: the right pane keeps its marker. dim
+// paints a line of a Gap, as codeRow does.
+func (r *Renderer) pane(ln diffparse.Line, n int, segs []Segment, marks []span, width, hoffset int, focus, rowEdge, dim bool) string {
 	t := r.Theme
 	if n == 0 {
 		bg := t.FillBg
@@ -144,6 +145,9 @@ func (r *Renderer) pane(ln diffparse.Line, n int, segs []Segment, marks []span, 
 	if !rowEdge {
 		rest := r.tones(ln.Kind, false)
 		tn.edge, tn.edgeFg = rest.edge, rest.edgeFg
+	}
+	if dim {
+		tn.codeFg = t.Dim
 	}
 	var b strings.Builder
 	b.WriteString(r.style(tn.edgeFg, tn.gutter).Render(tn.edge))
