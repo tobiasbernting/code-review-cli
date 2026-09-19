@@ -11,26 +11,42 @@ import (
 // A scene is one of the loading page's animations. One is picked at random
 // for each load, and tab steps through the rest.
 //
-// A boxed scene draws into the small box under the logo. A full scene owns
-// the whole screen, and must still name the pull request and how to cancel;
-// it reports false when the screen is too small for it, and the page falls
-// back to its one line.
+// Every scene owns the whole screen, and must still name the pull request
+// and how to cancel (footer does both); it reports false when the screen is
+// too small for it, and the page falls back to its one line.
 type scene struct {
-	name  string
-	title string // the box border's label; boxed scenes only
-	full  bool
-	draw  func(c *canvas, p loadingPage) bool
+	name   string
+	themed bool // drawn on the theme's background, not on black
+	draw   func(c *canvas, p loadingPage) bool
 }
 
 var scenes = []scene{
-	{name: "diff", title: "reviewing", draw: drawDiff},
-	{name: "boot", title: "booting", draw: drawBoot},
-	{name: "penalty", title: "penalty", draw: drawPenalty},
-	{name: "rain", full: true, draw: drawRain},
-	{name: "crawl", full: true, draw: drawCrawl},
+	{name: "diff", themed: true, draw: drawDiff},
+	{name: "boot", draw: drawBoot},
+	{name: "linux", draw: drawLinux},
+	{name: "penalty", draw: drawPenalty},
+	{name: "rain", draw: drawRain},
+	{name: "crawl", draw: drawCrawl},
 }
 
-const boxRows = 7
+// footerRows is how tall footer is.
+const footerRows = 4
+
+// footer names the load and the keys on the canvas's last four rows.
+func footer(c *canvas, p loadingPage, accent, text, dim string) {
+	name := fmt.Sprintf("%s#%d", p.item.Repo, p.item.Number)
+	room := maxInt(1, c.w-4-runewidth.StringWidth(name)-2)
+	top := c.h - footerRows
+	c.clear(0, top, c.w, footerRows)
+	at := c.text(2, top, name, accent, true)
+	c.text(at, top, "  "+runewidth.Truncate(p.item.Title, room, "…"), text, false)
+	if p.item.Author != "" {
+		c.text(2, top+1, "by "+p.item.Author, dim, false)
+	}
+	at = c.text(2, top+2, spinner[p.frame%len(spinner)], accent, false)
+	c.text(at, top+2, " fetching the pull request…", dim, false)
+	c.text(2, top+3, loadingHint, dim, false)
+}
 
 // space is behind the full scenes, whatever the theme: rain and starfields
 // only read on black.
@@ -145,26 +161,76 @@ func noise(vs ...int) int {
 	return int(h & 0x7fffffff)
 }
 
-// --- diff: a review being written, typed out in the theme's diff colours.
+// --- diff: a review being written in a full-screen editor, in the theme's
+// own diff colours.
+
+// loadingPatch is typed out, a few characters a frame, while the pull
+// request loads.
+var loadingPatch = []string{
+	`diff --git a/review.go b/review.go`,
+	`--- a/review.go`,
+	`+++ b/review.go`,
+	`@@ -1,6 +1,9 @@`,
+	` func review(pr *PR) {`,
+	`-    skim(pr)`,
+	`-    approve(pr) // LGTM`,
+	`+    read(pr.Diff)`,
+	`+    think()`,
+	`+    for _, c := range pr.Changes {`,
+	`+        comment(c)`,
+	`+    }`,
+	` }`,
+}
+
+// cardWidth is how wide the rain's clearing lets the title run.
+const cardWidth = 36
+
+const (
+	typedPerTick = 6  // the whole patch in about the time a load takes
+	holdFrames   = 15 // how long the finished patch stays before it restarts
+)
 
 func drawDiff(c *canvas, p loadingPage) bool {
 	t := p.theme
+	if c.w < 40 || c.h < 12 {
+		return false
+	}
+	body := c.h - footerRows - 2 // between the tab bar and the status line
+	const gutter = 5
+
 	total := 0
-	for _, l := range loadingHunk {
+	for _, l := range loadingPatch {
 		total += len(l) + 1
 	}
 	typed := (p.frame * typedPerTick) % (total + holdFrames*typedPerTick)
+	done := typed >= total
 
-	cursorShown := false
-	for y, l := range loadingHunk {
+	at := c.text(1, 0, " review.go ", t.Accent, true)
+	if !done {
+		c.text(at, 0, "[+]", t.Dim, false)
+	}
+	c.text(at+4, 0, strings.Repeat("─", maxInt(0, c.w-at-5)), t.Dim, false)
+
+	// What has been typed so far, scrolled like an editor once it passes
+	// the bottom of the window.
+	type line struct {
+		s, colour string
+		cursor    bool
+	}
+	var lines []line
+	row, col := 1, 1
+	for _, l := range loadingPatch {
+		if typed < 0 {
+			break
+		}
 		shown := l
 		if typed < len(l) {
-			shown = l[:maxInt(0, typed)]
+			shown = l[:typed]
 		}
-		typed -= len(l) + 1
-
 		colour := t.Fg
 		switch {
+		case strings.HasPrefix(l, "diff "), strings.HasPrefix(l, "--- "), strings.HasPrefix(l, "+++ "):
+			colour = t.Dim
 		case strings.HasPrefix(l, "@@"):
 			colour = t.Accent
 		case strings.HasPrefix(l, "+"):
@@ -172,37 +238,84 @@ func drawDiff(c *canvas, p loadingPage) bool {
 		case strings.HasPrefix(l, "-"):
 			colour = t.DelSign
 		}
-		x := c.text(0, y, shown, colour, false)
-		if !cursorShown && typed < 0 {
-			cursorShown = true
-			if p.frame%6 < 3 {
-				c.set(x, y, '▌', t.Accent, false)
-			}
+		cursor := typed <= len(l)
+		lines = append(lines, line{shown, colour, cursor})
+		row, col = len(lines), len(shown)+1
+		typed -= len(l) + 1
+	}
+	from := maxInt(0, len(lines)-body)
+	for y := 0; y < body; y++ {
+		i := from + y
+		if i >= len(lines) {
+			c.text(0, 1+y, "~", t.Dim, false)
+			continue
+		}
+		l := lines[i]
+		c.text(0, 1+y, fmt.Sprintf("%*d ", gutter-1, i+1), t.Dim, false)
+		x := c.text(gutter, 1+y, l.s, l.colour, false)
+		if l.cursor && !done && p.frame%6 < 3 {
+			c.set(x, 1+y, '▌', t.Accent, false)
 		}
 	}
+
+	status := c.h - footerRows - 1
+	if done {
+		c.text(0, status, fmt.Sprintf(`"review.go" %dL written`, len(loadingPatch)), t.Dim, false)
+	} else {
+		c.text(0, status, "-- INSERT --", t.Accent, true)
+	}
+	pos := fmt.Sprintf("%d,%d", row, col)
+	c.text(c.w-len(pos)-6, status, pos, t.Dim, false)
+	c.text(c.w-4, status, "All", t.Dim, false)
+
+	footer(c, p, t.Accent, t.Fg, t.Dim)
 	return true
 }
 
 // --- boot: a 90s PC starting up, with the pull request as its disk.
 
 func drawBoot(c *canvas, p loadingPage) bool {
-	t := p.theme
+	const (
+		grey   = "#aaaaaa"
+		white  = "#ffffff"
+		blue   = "#5555ff"
+		yellow = "#ffff55"
+		green  = "#55ff55"
+	)
+	if c.w < 50 || c.h < 14 {
+		return false
+	}
 	type step struct {
-		label string
-		takes int // frames of dots before OK; 0 prints at once
+		label  string
+		takes  int    // frames of dots before the result; 0 prints at once
+		result string // what the dots end in
 	}
+	n := p.item.Number
 	steps := []step{
-		{"KRV BIOS v2.0  (C) 1987 Diff Corp.", 0},
-		{"", 0}, // the memory count, filled in below
-		{"CPU: 6502 @ 1.02 MHz", 2},
-		{"Detecting diff drive", 3},
-		{"Loading KRV.SYS", 3},
-		{fmt.Sprintf("Mounting PR #%d", p.item.Number), 4},
-		{fmt.Sprintf("C:\\> krv review #%d", p.item.Number), 0},
+		{"KRV Modular BIOS v2.0, An Energy Star Ally", 0, ""},
+		{"Copyright (C) 1987-96, Diff Corp.", 0, ""},
+		{"", 0, ""},
+		{"KRV-9000 CPU at 133MHz", 0, ""},
+		{"", 0, ""}, // the memory count, filled in below
+		{"", 0, ""},
+		{"KRV Plug and Play BIOS Extension v1.0A", 0, ""},
+		{"Detecting IDE Primary Master", 4, "KRV DIFF DRIVE"},
+		{"Detecting IDE Primary Slave", 3, "None"},
+		{"Detecting IDE Secondary Master", 3, "CD-ROM 52X"},
+		{"Detecting IDE Secondary Slave", 3, "None"},
+		{"", 0, ""},
+		{"Loading KRV.SYS", 4, "OK"},
+		{fmt.Sprintf("Mounting PR #%d", n), 5, "OK"},
+		{"", 0, ""},
+		{fmt.Sprintf("C:\\> krv review #%d", n), 0, ""},
 	}
-	// About three seconds to the prompt, which then blinks a while.
-	const memFrames = 6
-	f := p.frame % 60
+	const (
+		memIndex  = 4
+		memFrames = 10
+		dotsTo    = 34 // the column the dots run out to
+	)
+	f := p.frame % 90
+	area := c.h - footerRows - 2 // the last row is the BIOS's own footer
 
 	var shown []func(y int)
 	start := 0
@@ -212,129 +325,452 @@ func drawBoot(c *canvas, p loadingPage) bool {
 		}
 		in := f - start
 		switch {
-		case i == 1:
-			kb := minInt(640, in*640/memFrames)
+		case i == memIndex:
+			kb := minInt(65536, in*65536/memFrames)
 			shown = append(shown, func(y int) {
-				x := c.text(0, y, fmt.Sprintf("Memory test: %3dK", kb), t.Fg, false)
-				if kb == 640 {
-					c.text(x, y, " OK", t.AddSign, true)
+				x := c.text(0, y, fmt.Sprintf("Memory Test :  %5dK", kb), grey, false)
+				if kb == 65536 {
+					c.text(x, y, " OK", white, true)
 				}
 			})
 			start += memFrames + 2
 		case s.takes > 0:
-			// Dots run out to the edge, then the OK lands.
-			all := maxInt(3, c.w-len(s.label)-4)
+			all := maxInt(3, dotsTo-len(s.label))
 			dots, ok := minInt(all, in*all/s.takes), in >= s.takes
 			shown = append(shown, func(y int) {
-				x := c.text(0, y, s.label+" "+strings.Repeat(".", dots), t.Fg, false)
+				x := c.text(0, y, s.label+" "+strings.Repeat(".", dots), grey, false)
 				if ok {
-					c.text(x, y, " OK", t.AddSign, true)
+					colour := white
+					if s.result == "OK" {
+						colour = green
+					}
+					c.text(x, y, " "+s.result, colour, true)
 				}
 			})
 			start += s.takes + 1
 		case i == len(steps)-1:
 			shown = append(shown, func(y int) {
-				x := c.text(0, y, s.label, t.Accent, false)
+				x := c.text(0, y, s.label, white, false)
 				if p.frame%6 < 3 {
-					c.set(x, y, '▌', t.Accent, false)
+					c.set(x, y, '_', white, false)
 				}
 			})
+		case i == 0:
+			shown = append(shown, func(y int) { c.text(0, y, s.label, white, true) })
+			start += 2
 		default:
-			shown = append(shown, func(y int) { c.text(0, y, s.label, t.Dim, true) })
-			start += 3
+			shown = append(shown, func(y int) { c.text(0, y, s.label, grey, false) })
+			start += 2
 		}
 	}
 	// The screen scrolls once it fills, like a real one.
-	from := maxInt(0, len(shown)-c.h)
+	from := maxInt(0, len(shown)-area)
 	for y, draw := range shown[from:] {
 		draw(y)
 	}
+
+	// The Energy Star corner, where there is room for it.
+	if c.w >= 76 {
+		for y, l := range loadingLogo {
+			colour := blue
+			if y >= 3 {
+				colour = yellow
+			}
+			c.transparent(c.w-len(l)-2, y, l, colour, true)
+		}
+	}
+	c.text(0, area, fmt.Sprintf("09/19/26-KRV9000-PR%d-00", n), grey, false)
+
+	footer(c, p, white, white, grey)
 	return true
+}
+
+// --- linux: a kernel boots, then someone breaks into the pull request.
+
+func drawLinux(c *canvas, p loadingPage) bool {
+	const (
+		white = "#d0d0d0"
+		grey  = "#6c6c6c"
+		green = "#00ff5f"
+	)
+	if c.w < 50 || c.h < 14 {
+		return false
+	}
+	s := linuxScript(p)
+	const hold = 40
+	f := p.frame % (s.t + hold)
+	area := c.h - footerRows - 1
+
+	var shown []cardLine
+	for _, l := range s.lines {
+		if l.at > f {
+			break
+		}
+		shown = append(shown, l.draw(f-l.at))
+	}
+	from := maxInt(0, len(shown)-area)
+	for y, l := range shown[from:] {
+		at := 0
+		for _, sp := range l {
+			at = c.text(at, y, sp.s, sp.fg, sp.bold)
+		}
+	}
+
+	if f >= s.t {
+		colour := green
+		if (f-s.t)/3%2 == 1 {
+			colour = white
+		}
+		name := fmt.Sprintf("root@%s#%d", p.item.Repo, p.item.Number)
+		banner(c, area/2, []string{"A C C E S S   G R A N T E D", name}, colour)
+	}
+
+	footer(c, p, green, white, grey)
+	return true
+}
+
+// banner draws a double-lined box around lines, centred on row y, over
+// whatever is there.
+func banner(c *canvas, y int, lines []string, colour string) {
+	inner := 0
+	for _, l := range lines {
+		inner = maxInt(inner, runewidth.StringWidth(l))
+	}
+	inner += 8
+	top := y - (len(lines)+4)/2
+	x := (c.w - inner - 2) / 2
+	c.clear(x-1, top-1, inner+4, len(lines)+6)
+	c.text(x, top, "╔"+strings.Repeat("═", inner)+"╗", colour, true)
+	c.text(x, top+1, "║"+strings.Repeat(" ", inner)+"║", colour, true)
+	for i, l := range lines {
+		pad := inner - runewidth.StringWidth(l)
+		c.text(x, top+2+i, "║"+strings.Repeat(" ", pad/2)+l+strings.Repeat(" ", pad-pad/2)+"║", colour, i == 0)
+	}
+	c.text(x, top+2+len(lines), "║"+strings.Repeat(" ", inner)+"║", colour, true)
+	c.text(x, top+3+len(lines), "╚"+strings.Repeat("═", inner)+"╝", colour, true)
+}
+
+// termLine is one line of a scripted terminal session: it appears at frame
+// at, and draw gives it as it looks age frames later.
+type termLine struct {
+	at   int
+	draw func(age int) cardLine
+}
+
+// termScript builds a terminal session line by line; t is the frame the
+// next line would appear at.
+type termScript struct {
+	lines []termLine
+	t     int
+}
+
+func (s *termScript) print(wait int, l cardLine) {
+	s.t += wait
+	s.lines = append(s.lines, termLine{s.t, func(int) cardLine { return l }})
+}
+
+// typed is a command typed at a prompt, two keys a frame.
+func (s *termScript) typed(prompt cardLine, cmd, colour string) {
+	s.t += 3
+	keys := []rune(cmd)
+	s.lines = append(s.lines, termLine{s.t, func(age int) cardLine {
+		n := minInt(len(keys), age*2)
+		l := append(append(cardLine{}, prompt...), span{string(keys[:n]), colour, false})
+		if n < len(keys) {
+			l = append(l, span{"█", colour, false})
+		}
+		return l
+	}})
+	s.t += (len(keys)+1)/2 + 2
+}
+
+// progress is a bar that fills over frames, then says so.
+func (s *termScript) progress(label string, frames int, bar, text, done string) {
+	s.t++
+	const width = 24
+	s.lines = append(s.lines, termLine{s.t, func(age int) cardLine {
+		filled := minInt(width, age*width/frames)
+		l := cardLine{{"[*] ", bar, true}, {label + " [", text, false},
+			{strings.Repeat("█", filled), bar, false},
+			{strings.Repeat("░", width-filled), text, false},
+			{fmt.Sprintf("] %3d%%", filled*100/width), text, false}}
+		if filled == width {
+			l = append(l, span{" done", done, true})
+		}
+		return l
+	}})
+	s.t += frames
+}
+
+// crack is a secret being guessed: hex that churns every frame, then the
+// answer.
+func (s *termScript) crack(label, found string, frames int, mark, text, churn, done string) {
+	s.t++
+	const digits = "0123456789abcdef"
+	s.lines = append(s.lines, termLine{s.t, func(age int) cardLine {
+		l := cardLine{{"[*] ", mark, true}, {label + " ", text, false}}
+		if age >= frames {
+			return append(l, span{found, churn, true}, span{" ok", done, true})
+		}
+		guess := make([]byte, len(found))
+		for i := range guess {
+			guess[i] = digits[noise(i, age, len(label))%len(digits)]
+		}
+		return append(l, span{string(guess), churn, false})
+	}})
+	s.t += frames
+}
+
+func linuxScript(p loadingPage) *termScript {
+	const (
+		white  = "#d0d0d0"
+		grey   = "#6c6c6c"
+		green  = "#00ff5f"
+		red    = "#ff3b3b"
+		yellow = "#ffd75f"
+		cyan   = "#5fd7ff"
+	)
+	n, repo := p.item.Number, p.item.Repo
+	s := &termScript{}
+
+	// The kernel, two lines a frame.
+	kernel := []string{
+		fmt.Sprintf("Linux version 6.9.%d-krv (root@diffcorp) (gcc 13.2.0) #%d SMP PREEMPT_DYNAMIC", n%20, n),
+		fmt.Sprintf("Command line: BOOT_IMAGE=/vmlinuz-krv root=/dev/pr%d ro quiet nosplash", n),
+		"x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'",
+		"BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable",
+		"DMI: Diff Corp. KRV-9000/Review Board, BIOS 2.0 09/19/2026",
+		"tsc: Detected 4200.000 MHz processor",
+		"Memory: 65536K/65536K available (1337K kernel code)",
+		"pci 0000:00:1f.2: [8086:2922] type 00 class 0x010601",
+		"ahci 0000:00:1f.2: AHCI 0001.0000 32 slots 6 ports 6 Gbps",
+		"scsi 0:0:0:0: Direct-Access     KRV      DIFF DRIVE  2.0",
+		"sd 0:0:0:0: [sda] Attached SCSI disk",
+		"e1000e 0000:00:19.0 eth0: 52:54:00:13:37:00",
+		"NET: Registered PF_PACKET protocol family",
+		"EXT4-fs (sda1): mounted filesystem with ordered data mode",
+		"random: crng init done",
+		"audit: apparmor=\"DENIED\" operation=\"ptrace\" profile=\"ci-gatekeeper\"",
+		"systemd[1]: systemd 255 running in system mode",
+		"systemd[1]: Hostname set to <krv>.",
+	}
+	usec := 0
+	for i, l := range kernel {
+		colour := white
+		if strings.Contains(l, "DENIED") {
+			colour = yellow
+		}
+		s.print(i%2, cardLine{{fmt.Sprintf("[%5d.%06d] ", usec/1000000, usec%1000000), grey, false}, {l, colour, false}})
+		usec += 3000 + noise(i, n)%400000
+	}
+
+	ok := func(l string) {
+		s.print(1, cardLine{{"[  ", white, false}, {"OK", green, true}, {"  ] ", white, false}, {l, white, false}})
+	}
+	ok("Started Journal Service.")
+	ok(fmt.Sprintf("Mounted /pr/%d.", n))
+	ok("Reached target Network.")
+	ok("Started OpenSSH Daemon.")
+	s.print(1, cardLine{{"[", white, false}, {"FAILED", red, true}, {"] ", white, false}, {"Failed to start CI Gatekeeper.", white, false}})
+	ok("Started krv review daemon.")
+	s.print(2, nil)
+
+	// Then someone logs in.
+	s.typed(cardLine{{"krv login: ", white, false}}, "root", white)
+	s.typed(cardLine{{"Password: ", white, false}}, "************", grey)
+	s.t += 4
+	s.print(0, cardLine{{"Last login: Sat Sep 19 04:20:00 2026 from 10.13.37.1", grey, false}})
+	prompt := cardLine{{"root@krv", red, true}, {":", white, false}, {"~", cyan, true}, {"# ", white, false}}
+	s.typed(prompt, fmt.Sprintf("./krv --target %s --pr %d --stealth", repo, n), white)
+
+	step := func(wait int, mark, markColour, l, result string) {
+		line := cardLine{{mark + " ", markColour, true}, {l, white, false}}
+		if result != "" {
+			line = append(line, span{" " + result, green, true})
+		}
+		s.print(wait, line)
+	}
+	step(2, "[*]", cyan, "resolving github.com ...........", "140.82.121.3")
+	step(3, "[*]", cyan, "handshake TLSv1.3 ECDHE-RSA-AES256-GCM ...", "ok")
+	s.crack("cracking maintainer token", fmt.Sprintf("ghp_%x", noise(n, 1337)), 12, cyan, white, yellow, green)
+	s.progress("bypassing branch protection", 14, cyan, white, green)
+	step(2, "[!]", yellow, "CI gatekeeper awake, spoofing status checks ...", "ok")
+	step(3, "[*]", cyan, fmt.Sprintf("injecting reviewer into %s#%d ...", repo, n), "ok")
+	step(2, "[*]", cyan, "dumping diff", "")
+
+	// The dump is the pull request itself.
+	data := []byte(fmt.Sprintf("%s#%d %s by %s", repo, n, p.item.Title, p.item.Author))
+	for off := 0; off < minInt(len(data), 96); off += 16 {
+		chunk := data[off:minInt(len(data), off+16)]
+		var hex, text strings.Builder
+		for i := 0; i < 16; i++ {
+			if i == 8 {
+				hex.WriteString(" ")
+			}
+			if i >= len(chunk) {
+				hex.WriteString("   ")
+				continue
+			}
+			fmt.Fprintf(&hex, "%02x ", chunk[i])
+			if b := chunk[i]; b >= 0x20 && b < 0x7f {
+				text.WriteByte(b)
+			} else {
+				text.WriteByte('.')
+			}
+		}
+		s.print(1, cardLine{{fmt.Sprintf("%08x  ", off), grey, false}, {hex.String(), green, false}, {" |" + text.String() + "|", white, false}})
+	}
+	step(3, "[+]", green, fmt.Sprintf("root on %s#%d", repo, n), "")
+	s.t += 3
+	return s
 }
 
 // --- penalty: the keeper goes the wrong way and it's in the top corner.
 
 func drawPenalty(c *canvas, p loadingPage) bool {
-	t := p.theme
 	const (
-		left, right = 3, 32 // the posts
-		spotX       = 17
+		white   = "#ffffff"
+		grey    = "#8a8f98"
+		net     = "#5c6370"
+		grassA  = "#2e7d32"
+		grassB  = "#43a047"
+		keeperC = "#ffd600"
+		kickerC = "#e53935"
+		board   = "#4fc3f7"
 	)
-	f := p.frame % 50
+	crowdColours := []string{"#e53935", "#1e88e5", "#fdd835", "#ffffff", "#8e24aa", "#fb8c00"}
 
-	// The goal: crossbar, posts and a net.
-	c.text(left, 0, strings.Repeat("_", right-left+1), t.Fg, true)
-	for y := 1; y <= 4; y++ {
-		c.set(left, y, '|', t.Fg, true)
-		c.set(right, y, '|', t.Fg, true)
-		for x := left + 1; x < right; x++ {
-			if (x+y)%2 == 0 {
-				c.set(x, y, '.', t.Dim, false)
+	sky := c.h - footerRows - 1
+	if c.w < 44 || sky < 16 {
+		return false
+	}
+	crowd := sky / 4
+	bar := crowd + 1
+	netRows := sky / 3
+	line := bar + netRows + 1 // the goal line
+	spotX, spotY := c.w/2, sky-2
+	gw := minInt(c.w-10, 64)
+	left := (c.w - gw) / 2
+	right := left + gw - 1
+	goalX, goalY := right-3, bar+1
+
+	f := p.frame % 50
+	scored := f >= 20
+
+	// The crowd, on its feet once it's in.
+	for y := 0; y < crowd; y++ {
+		for x := 0; x < c.w; x++ {
+			n := noise(x, y, 11)
+			if n%5 == 0 {
+				continue
+			}
+			colour := crowdColours[n%len(crowdColours)]
+			r := 'o'
+			if scored && (f/2+noise(x/3, y))%2 == 0 {
+				r = rune("\\o/"[x%3])
+			}
+			if noise(x, y, p.frame)%150 == 0 {
+				r, colour = '*', white // a camera flash
+			}
+			c.set(x, y, r, colour, false)
+		}
+	}
+	// The advertising boards, scrolling.
+	ad := []rune(" KRV · 0 BUGS · REVIEW IT PROPERLY ·")
+	for x := 0; x < c.w; x++ {
+		colour := board
+		if scored && f/3%2 == 0 {
+			colour = white
+		}
+		c.set(x, crowd, ad[(x+p.frame)%len(ad)], colour, true)
+	}
+
+	// The pitch, mown in stripes.
+	for y := line; y < sky; y++ {
+		for x := 0; x < c.w; x++ {
+			colour := grassA
+			if (x/6)%2 == 0 {
+				colour = grassB
+			}
+			if noise(x, y, 5)%7 == 0 {
+				c.set(x, y, '"', colour, false)
 			}
 		}
 	}
-	for x := 0; x < c.w; x++ {
-		if noise(x, 5)%3 == 0 {
-			c.set(x, 5, '"', t.AddSign, false)
+	c.text(0, line, strings.Repeat("─", c.w), white, false)
+
+	// The goal: crossbar, posts and a net.
+	c.text(left, bar, strings.Repeat("_", right-left+1), white, true)
+	for y := bar + 1; y <= bar+netRows; y++ {
+		c.set(left, y, '|', white, true)
+		c.set(right, y, '|', white, true)
+		for x := left + 1; x < right; x++ {
+			if (x+y)%2 == 0 {
+				c.set(x, y, '.', net, false)
+			}
 		}
 	}
 
-	// Where the ball ends up: top right, just under the bar.
-	goalX, goalY := right-3, 1
-	ball := func(x, y int) { c.set(x, y, 'o', t.Fg, true) }
-
+	ball := func(x, y int) { c.set(x, y, 'o', white, true) }
 	switch {
 	case f < 12: // the run-up: keeper on the line, ball on the spot
 		sway := []int{0, 1, 0, -1}[f/3%4]
-		keeper(c, spotX+sway, t.Accent)
-		ball(spotX+1, 6)
-		kicker(c, spotX-8+f/2, "/|\\", t.DelSign)
-	case f < 20: // the strike, curling away from the dive
+		keeper(c, spotX+sway, line-3, keeperC)
+		ball(spotX+1, spotY)
+		kicker(c, spotX-8+f/2, spotY, "/|\\", kickerC)
+	case !scored: // the strike, curling away from the dive
 		s := f - 12
 		x := spotX + 1 + (goalX-spotX-1)*s/7
-		y := 6 - (6-goalY)*s*(14-s)/49       // rises fast, then drops under the bar
-		kicker(c, spotX-2, "/|_", t.DelSign) // follow-through
-		diving(c, spotX-2*s, minInt(4, 2+s/2), t.Accent)
+		y := spotY - (spotY-goalY)*s*(14-s)/49 // rises fast, then drops under the bar
+		kicker(c, spotX-2, spotY, "/|_", kickerC)
+		diving(c, spotX-(spotX-left-6)*s/7, line-3+minInt(2, s/2), left+2, keeperC)
 		ball(x, y)
 	default: // in the net
-		diving(c, spotX-16, 4, t.Accent)
+		diving(c, left+6, line-1, left+2, keeperC)
+		kicker(c, spotX-2, spotY, "/ \\", kickerC)
+		c.transparent(spotX-2, spotY-2, "\\ /", kickerC, true) // arms up
 		ripple := f - 20
-		for y := 1; y <= 4 && ripple < 10; y++ {
+		for y := bar + 1; y <= bar+netRows && ripple < 16; y++ {
 			for x := left + 1; x < right; x++ {
-				d := absInt(x-goalX)/2 + absInt(y-goalY)
-				if d == ripple/2 || d == ripple/2-1 {
-					c.set(x, y, '#', t.Fg, false)
+				d := absInt(x-goalX)/3 + absInt(y-goalY)
+				if d == ripple || d == ripple-1 {
+					c.set(x, y, '#', white, false)
 				}
 			}
 		}
 		ball(goalX, goalY)
 		if f >= 24 {
-			colour := t.Accent
+			colour := keeperC
 			if f/2%2 == 0 {
-				colour = t.AddSign
+				colour = grassB
 			}
-			c.centre(2, " G O O O A L ! ", colour, true)
-			c.centre(3, " krv 1 - 0 bugs ", t.Fg, false)
+			mid := bar + (netRows+1)/2
+			c.centre(mid, "  G O O O A L !  ", colour, true)
+			c.centre(mid+1, "  krv 1 - 0 bugs  ", white, false)
 		}
 	}
+
+	footer(c, p, white, white, grey)
 	return true
 }
 
-// kicker is the penalty taker from behind, on the edge of the box.
-func kicker(c *canvas, x int, legs, colour string) {
-	c.transparent(x+1, 5, "o", colour, true)
-	c.transparent(x, 6, legs, colour, true)
+// kicker is the penalty taker from behind, feet on row y.
+func kicker(c *canvas, x, y int, legs, colour string) {
+	c.transparent(x+1, y-1, "o", colour, true)
+	c.transparent(x, y, legs, colour, true)
 }
 
-func keeper(c *canvas, x int, colour string) {
+// keeper stands on the line, head on row y.
+func keeper(c *canvas, x, y int, colour string) {
 	for i, l := range []string{" o ", "\\|/", "/ \\"} {
-		c.transparent(x-1, 2+i, l, colour, true)
+		c.transparent(x-1, y+i, l, colour, true)
 	}
 }
 
-// diving is the keeper at full stretch, head first towards the far post.
-func diving(c *canvas, x, y int, colour string) {
-	c.transparent(maxInt(4, x-2), y, "o==<", colour, true)
+// diving is the keeper at full stretch, head first towards the far post,
+// never through it.
+func diving(c *canvas, x, y, post int, colour string) {
+	c.transparent(maxInt(post, x-2), y, "o==<", colour, true)
 }
 
 // --- rain: the matrix, all over the screen, with the load in a clearing.
@@ -406,7 +842,7 @@ func (p loadingPage) card(bright, text, dim string) cardLines {
 	for _, l := range loadingLogo {
 		lines = append(lines, cardLine{{l, bright, true}})
 	}
-	room := maxInt(1, hunkWidth-runewidth.StringWidth(name)-2)
+	room := maxInt(1, cardWidth-runewidth.StringWidth(name)-2)
 	lines = append(lines, nil,
 		cardLine{{name, bright, true}, {"  " + runewidth.Truncate(p.item.Title, room, "…"), text, false}})
 	if p.item.Author != "" {
@@ -456,12 +892,11 @@ func drawCrawl(c *canvas, p loadingPage) bool {
 		grey   = "#8a8f98"
 		red    = "#ff3b30"
 	)
-	const footer = 4
 	width := minInt(46, c.w-6)
 	if width < 34 || c.h < 16 {
 		return false
 	}
-	sky := c.h - footer - 1 // rows above the footer
+	sky := c.h - footerRows - 1 // rows above the footer
 
 	// Stars, a few of them twinkling.
 	for y := 0; y < sky; y++ {
@@ -514,18 +949,7 @@ func drawCrawl(c *canvas, p loadingPage) bool {
 		c.transparent(x+6+bolt*3, y, "==", red, true)
 	}
 
-	// The footer: what is loading and how to get out.
-	name := fmt.Sprintf("%s#%d", p.item.Repo, p.item.Number)
-	room := maxInt(1, c.w-4-runewidth.StringWidth(name)-2)
-	top := c.h - footer
-	at := c.text(2, top, name, yellow, true)
-	c.text(at, top, "  "+runewidth.Truncate(p.item.Title, room, "…"), "#e6e9ef", false)
-	if p.item.Author != "" {
-		c.text(2, top+1, "by "+p.item.Author, grey, false)
-	}
-	at = c.text(2, top+2, spinner[p.frame%len(spinner)], yellow, false)
-	c.text(at, top+2, " fetching the pull request…", grey, false)
-	c.text(2, top+3, loadingHint, grey, false)
+	footer(c, p, yellow, "#e6e9ef", grey)
 	return true
 }
 
