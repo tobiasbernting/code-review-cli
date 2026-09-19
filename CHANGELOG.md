@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/tobiasbernting/krv/compare/v2.0.0...v2.1.0) (2026-09-19)
+
+
+### Features
+
+* mouse support, yank, structured help ([#28](https://github.com/tobiasbernting/krv/issues/28)) ([bbb381e](https://github.com/tobiasbernting/krv/commit/bbb381ef051394c6791c71bdc40844eff044e309))
+
 ## [2.0.0](https://github.com/tobiasbernting/krv/compare/v1.6.0...v2.0.0) (2026-09-18)
 
 
