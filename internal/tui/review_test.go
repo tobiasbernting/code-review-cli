@@ -297,7 +297,7 @@ func TestSubmitWaitsForSync(t *testing.T) {
 		o.Source = Source{Kind: SourcePR, Repo: "acme/x", PRNumber: 1}
 	})
 	m.review.Add("svc.go", 0, 3, "bbbbbbb", "a note")
-	m.sync.syncing = true
+	m.requests.start(reqSync)
 	m = press(t, m, "S")
 	if m.mode == modeSubmit || !strings.Contains(m.err, "sync") {
 		t.Errorf("submit was not held during sync: mode=%v err=%q", m.mode, m.err)

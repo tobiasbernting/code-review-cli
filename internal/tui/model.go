@@ -105,6 +105,9 @@ type Model struct {
 	lastPress   lastPress
 	drag        dragState
 
+	// requests are the GitHub requests this review has running.
+	requests inflight
+
 	// now is the clock double clicks are timed against.
 	now func() time.Time
 }
@@ -134,6 +137,7 @@ func New(opts Options) Model {
 		updatedComments: map[int64]bool{},
 		now:             time.Now,
 		clip:            opts.Clipboard,
+		requests:        inflight{},
 	}
 	m.sync.syncedAt = opts.SyncedAt
 	m.sync.err = opts.SyncError
@@ -293,7 +297,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	m.status, m.err = "", ""
-	if m.follow.busy {
+	if m.requests.mutating() {
 		// Quitting stays available: a GitHub mutation can hang, and the review
 		// must not become impossible to leave while it does. Only ctrl+c does
 		// it while a note is being typed, where q is just a letter.
@@ -722,7 +726,7 @@ func fitHint(width int, left string, hints []string) string {
 
 func (m Model) syncStatus() string {
 	switch {
-	case m.sync.syncing:
+	case m.requests.has(reqSync):
 		return "  ·  syncing…"
 	case m.sync.err != "":
 		return "  ·  sync failed " + age(m.sync.failedAt) + ": " + m.sync.err

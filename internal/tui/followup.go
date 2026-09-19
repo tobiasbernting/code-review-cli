@@ -19,7 +19,6 @@ type followupState struct {
 	session                                         *followup.Session
 	threads                                         []ghsrc.Thread
 	cursor, top                                     int
-	busy                                            bool
 	context, contextErr, contextThread, contextHead string
 	contextLoading                                  bool
 }
@@ -46,7 +45,7 @@ func (m Model) selectedThread() (ghsrc.Thread, bool) {
 
 func (m Model) handleThreadKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
-	if m.sync.syncing {
+	if m.requests.has(reqSync) {
 		m.status = "wait for sync to finish"
 		return m, nil
 	}
@@ -67,11 +66,14 @@ func (m Model) handleThreadKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if !ok || len(t.Comments) == 0 {
 				return m, nil
 			}
-			m.follow.busy = true
+			req := reqReply(t.ID)
+			if !m.requests.start(req) {
+				return m, nil
+			}
 			src := m.src
 			return m, func() tea.Msg {
 				comment, err := src.Client.Reply(src.Repo, src.PRNumber, t.Comments[0].ID, body)
-				return threadActionMsg{id: t.ID, reply: &comment, err: err}
+				return threadActionMsg{req: req, id: t.ID, reply: &comment, err: err}
 			}
 		}
 		return m, nil
@@ -164,11 +166,14 @@ func (m Model) handleThreadKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = "GitHub does not allow you to change this thread's resolution"
 			return m, nil
 		}
-		m.follow.busy = true
+		req := reqResolve(t.ID)
+		if !m.requests.start(req) {
+			return m, nil
+		}
 		client := m.src.Client
 		return m, func() tea.Msg {
 			err := client.SetThreadResolved(t.GraphQLID, !t.Resolved)
-			return threadActionMsg{id: t.ID, resolved: !t.Resolved, err: err}
+			return threadActionMsg{req: req, id: t.ID, resolved: !t.Resolved, err: err}
 		}
 	}
 	return m, nil
@@ -196,6 +201,7 @@ func (m Model) verifyThread() (tea.Model, tea.Cmd) {
 }
 
 type threadActionMsg struct {
+	req      string
 	id       string
 	reply    *ghsrc.Comment
 	resolved bool
@@ -203,7 +209,7 @@ type threadActionMsg struct {
 }
 
 func (m Model) applyThreadAction(msg threadActionMsg) (tea.Model, tea.Cmd) {
-	m.follow.busy = false
+	m.requests.done(msg.req)
 	if msg.err != nil {
 		m.err = msg.err.Error()
 		return m, nil
@@ -413,9 +419,9 @@ func (m Model) followupView() string {
 		}
 	}
 	left := fmt.Sprintf(" %d/%d threads verified", verified, len(m.follow.threads))
-	if m.sync.syncing {
+	if m.requests.has(reqSync) {
 		left = " refreshing…"
-	} else if m.follow.busy {
+	} else if m.requests.mutating() {
 		left = " updating GitHub…"
 	} else if m.sync.err != "" {
 		left = " sync failed: " + m.sync.err

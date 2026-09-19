@@ -175,7 +175,6 @@ func (a App) backToQueue() (tea.Model, tea.Cmd) {
 	a.gen++
 	a.screen = screenQueue
 	a.review = Model{}
-	a.queue.loading = true
 	return a, a.queue.load(true)
 }
 

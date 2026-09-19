@@ -18,11 +18,10 @@ type submitState struct {
 	event      string
 	body       string
 	editing    bool // the overall review body is being typed
-	sending    bool
 }
 
 func (m Model) openSubmit() (tea.Model, tea.Cmd) {
-	if m.sync.syncing {
+	if m.requests.has(reqSync) {
 		m.err = "wait for sync to finish before submitting"
 		return m, nil
 	}
@@ -60,13 +59,6 @@ type submitResultMsg struct {
 }
 
 func (m Model) handleSubmitKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.submit.sending {
-		// A hung request must not make the program impossible to leave.
-		if msg.String() == "ctrl+c" {
-			return m, tea.Quit
-		}
-		return m, nil
-	}
 	if m.submit.editing {
 		done, cancelled := m.in.handle(msg)
 		if cancelled {
@@ -114,7 +106,9 @@ func (m Model) handleSubmitKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = "GitHub does not let you approve or request changes on your own pull request"
 			return m, nil
 		}
-		m.submit.sending = true
+		if !m.requests.start(reqSubmit) {
+			return m, nil
+		}
 		return m, m.sendReview()
 	}
 	return m, nil
@@ -145,7 +139,7 @@ func (m Model) sendReview() tea.Cmd {
 }
 
 func (m Model) applySubmitResult(msg submitResultMsg) (tea.Model, tea.Cmd) {
-	m.submit.sending = false
+	m.requests.done(reqSubmit)
 	if msg.err != nil {
 		m.err = msg.err.Error()
 		m.mode = modeSubmit
@@ -214,7 +208,7 @@ func (m Model) submitView() string {
 		fmt.Fprintf(&b, "    %s %s  %s\n", dim.Render(n.Path), dim.Render(loc), firstLine(n.Body))
 	}
 
-	if m.submit.sending {
+	if m.requests.has(reqSubmit) {
 		fmt.Fprintf(&b, "\n  %s\n", sel.Render("submitting…"))
 	} else if m.err != "" {
 		fmt.Fprintf(&b, "\n  %s\n", lipgloss.NewStyle().Foreground(lipgloss.Color(t.DelFg)).Render(m.err))
