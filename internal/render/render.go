@@ -246,11 +246,12 @@ func Build(files []*diffparse.FileDiff, h *Highlighter, ov Overlay, layout Layou
 		gaps := ov.gaps(f)
 		for hi, hunk := range f.Hunks() {
 			// A rule between hunks, but not between a file header and the
-			// hunk it introduces: they belong together.
-			if roomy && hi > 0 {
+			// hunk it introduces: they belong together. A Gap between them
+			// separates them already, and a blank line among its lines would
+			// read as one the file does not have.
+			if !d.gap(fi, gaps, hi) && roomy && hi > 0 {
 				d.Rows = append(d.Rows, Row{Kind: RowSpacer, FileIdx: fi, HunkIdx: hi})
 			}
-			d.gap(fi, gaps, hi)
 			d.HunkRows = append(d.HunkRows, len(d.Rows))
 			d.Rows = append(d.Rows, Row{
 				Kind: RowHunk, FileIdx: fi, HunkIdx: hi,

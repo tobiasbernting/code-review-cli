@@ -142,16 +142,20 @@ Every Gap gets a row, in the gutter's colours so it reads as margin rather
 than as a line of the file:
 
 ```
-   3 │   4    three
-     │      ⋯ 7 unchanged lines
-                                      ← hunk header
+    3 │   4   three
+      │     ⋯ 7 unchanged lines
+  old │ new   (the next hunk's header)
 ```
 
-The `⋯` sits in the sign column and the count where code starts. Opening a
-Gap is `Overlay.Expansion`: the file's new-side text and, per Gap, how many
-lines are shown from its top (after the hunk above) and from its bottom
-(before the hunk below). `Build` draws the top lines, a `RowGap` for what is
-still hidden, then the bottom lines; a Gap shown whole has no row.
+The `⋯` sits in the sign column and the count where code starts. A Gap between
+two hunks takes the place of the spacer comfortable density would put there:
+it separates them already, and a blank line among its lines would read as one
+the file does not have.
+
+Opening a Gap is `Overlay.Expansion`: the file's new-side text and, per Gap,
+how many lines are shown from its top (after the hunk above) and from its
+bottom (before the hunk below). `Build` draws the top lines, a `RowGap` for
+what is still hidden, then the bottom lines; a Gap shown whole has no row.
 
 An expanded line is a `RowCode` (or a `RowPair`, the same line on both panes)
 with `Expanded` set: an unchanged line, both sides numbered, the old number
@@ -222,8 +226,9 @@ of its own.
 ## Density
 
 `Layout.Density` is the structural half of presentation. `comfortable` (the
-default) inserts a spacer before every hunk but the first in a file, and after
-a group of annotations, so hierarchy gets air and nothing else does; `compact`
+default) inserts a spacer before every hunk but the first in a file — unless a
+drawn [Gap](#gaps) sits between them — and after a group of annotations, so
+hierarchy gets air and nothing else does; `compact`
 gives every line of the terminal to the diff. It changes only how many
 `RowSpacer` rows exist — `TestComfortableDensitySeparatesHunksNotLines` pins
 that it never changes how many code rows there are.

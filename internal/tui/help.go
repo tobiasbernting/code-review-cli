@@ -44,6 +44,9 @@ var helpContent = []helpSection{
 		{keys: "f", desc: "file list"},
 		{keys: "x", desc: "mark this file reviewed, and move on"},
 		{keys: "enter", desc: "expand a thread, or open a comment in full"},
+		{keys: "enter on ⋯", desc: "show 20 more unchanged lines"},
+		{keys: "shift+enter on ⋯", desc: "show the whole gap"},
+		{keys: "alt+enter on ⋯", desc: "the same, where shift+enter reads as enter"},
 	}},
 	{title: "Comment", entries: []helpEntry{
 		{keys: "c", desc: "draft a comment on this line or the selection"},

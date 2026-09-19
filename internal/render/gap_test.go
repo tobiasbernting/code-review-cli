@@ -162,6 +162,18 @@ func TestGapRowSaysWhatIsLeftOut(t *testing.T) {
 	}
 }
 
+// The Gap separates the hunks, so the spacer comfortable density would put
+// between them does not also split the Gap's lines from the hunk above.
+func TestGapTakesTheSpacersPlace(t *testing.T) {
+	exp := Expansion{Text: twenty(), Shown: map[int]Shown{1: {Top: 1}}}
+	doc := Build(diffparse.Parse(twoHunks), NewHighlighter("", false), expanding(exp), Layout{})
+	for i, row := range doc.Rows {
+		if row.Kind == RowSpacer && i < doc.HunkRows[1] {
+			t.Errorf("spacer at row %d, above the second hunk", i)
+		}
+	}
+}
+
 type shownLine struct{ old, new int }
 
 func expandedLines(doc *Document) (lines []shownLine, gapRows []string) {

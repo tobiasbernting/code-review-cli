@@ -68,14 +68,14 @@ func (o Overlay) gaps(f *diffparse.FileDiff) *fileGaps {
 
 // gap draws the Gap before hunk index, if there is one: the lines shown from
 // its top, a row for what is still left out, then the lines shown from its
-// bottom.
-func (d *Document) gap(fi int, fg *fileGaps, index int) {
+// bottom. It reports whether there was one to draw.
+func (d *Document) gap(fi int, fg *fileGaps, index int) bool {
 	if fg == nil {
-		return
+		return false
 	}
 	g, ok := fg.byIndex[index]
 	if !ok {
-		return
+		return false
 	}
 	var top, bottom int
 	if fg.exp.Text != nil {
@@ -93,6 +93,7 @@ func (d *Document) gap(fi int, fg *fileGaps, index int) {
 	for i := g.Lines - bottom; i < g.Lines; i++ {
 		d.expandedLine(fi, g, i, fg.exp.Text)
 	}
+	return true
 }
 
 // expandedLine draws line i of a Gap as an unchanged line, on both sides in
