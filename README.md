@@ -46,6 +46,16 @@ status, age, and how many unsent drafts you already have on each. `enter` (or
 a double click) opens one, `t` switches to your own pull requests, `r`
 refreshes, and `L` shows the loading screen without loading anything.
 
+Each row also shows GitHub's review decision — `✓ approved`, `✗ changes`
+(changes requested) or `○ required` (review required), blank when the
+repository reports none — and the size, `+123 −45`. In the list to review, `●`
+marks a pull request with commits since your latest submitted review; one you
+have never reviewed has no marker. `enter` on a marked row opens straight into
+the changes since that review, as `a` would in a
+[follow-up review](#follow-up-reviews); `D` still shows the full diff. Your own
+pull requests show the decision and size, without the marker. On a narrow
+terminal the size goes first, then the decision's word.
+
 A pull request opened from the queue opens in the same window: `esc` cancels
 while it loads (`tab` meanwhile cycles the loading animations), `q` in the
 review goes back to the list (refreshed, cursor where you left it), and
