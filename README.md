@@ -43,8 +43,9 @@ including an enterprise one.
 
 A bare `krv` lists what is waiting on you, across every repository, with CI
 status, age, and how many unsent drafts you already have on each. `enter` (or
-a double click) opens one, `O` opens it in the browser, `t` switches to your own pull requests, `r`
-refreshes, and `L` shows the loading screen without loading anything.
+a double click) opens one, `O` opens it in the browser, `t` switches to your
+own pull requests, `r` refreshes, and `L` shows the loading screen without
+loading anything.
 
 A pull request opened from the queue opens in the same window: `esc` cancels
 while it loads (`tab` meanwhile cycles the loading animations), `q` in the
