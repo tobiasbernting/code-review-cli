@@ -39,43 +39,53 @@ func (m Model) cursorLine() (path string, line, hunk int, ok bool) {
 }
 
 func (m Model) startComment() (tea.Model, tea.Cmd) {
-	if m.changesView {
-		m.err = "press D for the current PR diff before editing draft anchors"
-		return m, nil
-	}
-	path, line, hunk, ok := m.cursorLine()
-	if !ok {
-		m.err = "put the cursor on an added or unchanged line to comment"
+	path, start, line, _, err := m.draftAnchor()
+	if err != "" {
+		m.err = err
 		return m, nil
 	}
 
-	start := line
+	m.pending = pendingNote{path: path, startLine: start, line: line}
+	m.in.start(draftPrompt("draft", start, line), "")
+	m.mode = modeInput
+	return m, nil
+}
+
+// draftAnchor is the lines a new draft goes on: the selection, else the
+// line under the cursor, or a reason there is none.
+func (m Model) draftAnchor() (path string, start, line, hunk int, err string) {
+	if m.changesView {
+		return "", 0, 0, -1, "press D for the current PR diff before editing draft anchors"
+	}
+	path, line, hunk, ok := m.cursorLine()
+	if !ok {
+		return "", 0, 0, -1, "put the cursor on an added or unchanged line to comment"
+	}
+
+	start = line
 	if m.rangeAnchor > 0 {
 		if m.rangeAnchorPath != path {
-			m.err = "the selection started in another file"
-			return m, nil
+			return "", 0, 0, -1, "the selection started in another file"
 		}
 		// GitHub requires both ends of a multi-line comment to sit in the
 		// same diff hunk, and rejects the whole review with a bare 422 when
 		// they do not.
 		if m.rangeAnchorHunk != hunk {
-			m.err = "a selection cannot span two hunks — press v to clear it"
-			return m, nil
+			return "", 0, 0, -1, "a selection cannot span two hunks — press v to clear it"
 		}
 		start = m.rangeAnchor
 		if start > line {
 			start, line = line, start
 		}
 	}
+	return path, start, line, hunk, ""
+}
 
-	m.pending = pendingNote{path: path, startLine: start, line: line}
-	prompt := fmt.Sprintf("draft L%d", line)
+func draftPrompt(what string, start, line int) string {
 	if start != line {
-		prompt = fmt.Sprintf("draft L%d-%d", start, line)
+		return fmt.Sprintf("%s L%d-%d ›", what, start, line)
 	}
-	m.in.start(prompt+" ›", "")
-	m.mode = modeInput
-	return m, nil
+	return fmt.Sprintf("%s L%d ›", what, line)
 }
 
 func (m *Model) clearSelection() {
@@ -197,6 +207,9 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.status = "cancelled"
 	case done:
 		body := strings.TrimSpace(m.in.value)
+		if m.unchangedSuggestion(body) {
+			return m, nil
+		}
 		m.in.stop()
 		m.mode = modeDiff
 		m.commit(body)
@@ -293,13 +306,22 @@ func (m Model) applyEditorResult(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeReply {
 		return m.applyReplyEditorResult(msg)
 	}
+	prompt := m.in.prompt
 	m.in.stop()
 	m.mode = modeDiff
 	if msg.err != nil {
 		m.err = "editor: " + msg.err.Error()
 		return m, nil
 	}
-	m.commit(strings.TrimSpace(msg.body))
+	body := strings.TrimSpace(msg.body)
+	// The warning needs somewhere to press enter again, so the text comes
+	// back to the composer.
+	if m.unchangedSuggestion(body) {
+		m.in.start(prompt, body)
+		m.mode = modeInput
+		return m, nil
+	}
+	m.commit(body)
 	return m, nil
 }
 

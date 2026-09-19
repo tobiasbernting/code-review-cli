@@ -46,6 +46,13 @@ type Config struct {
 	// Editor overrides $EDITOR for composing longer notes.
 	Editor string `toml:"editor"`
 
+	// OpenEditor is what o opens a file in, falling back to Editor.
+	// OpenEditorCmd overrides how it is called, as a template with {file}
+	// and {line}; OpenEditorWait, when set, says whether krv waits for it.
+	OpenEditor     string `toml:"open_editor"`
+	OpenEditorCmd  string `toml:"open_editor_cmd"`
+	OpenEditorWait *bool  `toml:"open_editor_wait"`
+
 	// Untracked includes untracked files in a working-tree review.
 	Untracked bool `toml:"untracked"`
 
@@ -145,6 +152,12 @@ func mergeFile(cfg *Config, path string) error {
 			cfg.Layout = file.Layout
 		case "editor":
 			cfg.Editor = file.Editor
+		case "open_editor":
+			cfg.OpenEditor = file.OpenEditor
+		case "open_editor_cmd":
+			cfg.OpenEditorCmd = file.OpenEditorCmd
+		case "open_editor_wait":
+			cfg.OpenEditorWait = file.OpenEditorWait
 		case "untracked":
 			cfg.Untracked = file.Untracked
 		case "width":
@@ -227,4 +240,12 @@ func (c Config) EditorCommand() string {
 		}
 	}
 	return "vi"
+}
+
+// OpenEditorCommand is the editor o opens a file in.
+func (c Config) OpenEditorCommand() string {
+	if c.OpenEditor != "" {
+		return c.OpenEditor
+	}
+	return c.EditorCommand()
 }

@@ -214,7 +214,14 @@ type Source struct {
 	Title    string
 	Repo     string // "owner/name", pull requests only
 	PRNumber int
+	URL      string // the pull request's page
 	Client   ghsrc.Client
+
+	// Root is the repository on disk, for a local review, and Rev the commit
+	// a local range ends at: empty when it ends at the working tree, whose
+	// files o opens in place.
+	Root string
+	Rev  string
 
 	// Author is the pull request's author and Viewer is you. GitHub rejects
 	// approving or requesting changes on your own pull request with a bare

@@ -189,6 +189,40 @@ func TestEditorPrecedence(t *testing.T) {
 	}
 }
 
+func TestOpenEditorFallsBackToEditor(t *testing.T) {
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "nano")
+	if got := (Config{}).OpenEditorCommand(); got != "nano" {
+		t.Errorf("OpenEditorCommand = %q, want $EDITOR", got)
+	}
+	if got := (Config{Editor: "hx"}).OpenEditorCommand(); got != "hx" {
+		t.Errorf("OpenEditorCommand = %q, want the editor setting", got)
+	}
+	cfg := Config{Editor: "hx", OpenEditor: "code"}
+	if got := cfg.OpenEditorCommand(); got != "code" {
+		t.Errorf("OpenEditorCommand = %q, want open_editor", got)
+	}
+	if got := cfg.EditorCommand(); got != "hx" {
+		t.Errorf("open_editor changed the composing editor to %q", got)
+	}
+}
+
+func TestOpenEditorSettingsLoad(t *testing.T) {
+	useConfigDir(t)
+	repo := t.TempDir()
+	write(t, repo, RepoFile, "open_editor = \"code\"\nopen_editor_cmd = \"myedit --line {line} {file}\"\nopen_editor_wait = false\n")
+	cfg, err := Load(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.OpenEditor != "code" || cfg.OpenEditorCmd != "myedit --line {line} {file}" {
+		t.Errorf("got %+v", cfg)
+	}
+	if cfg.OpenEditorWait == nil || *cfg.OpenEditorWait {
+		t.Errorf("open_editor_wait = false did not load: %v", cfg.OpenEditorWait)
+	}
+}
+
 func TestMouseIsOnByDefaultAndCanBeTurnedOff(t *testing.T) {
 	useConfigDir(t)
 	cfg, err := Load(t.TempDir())

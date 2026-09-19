@@ -118,6 +118,12 @@ type pendingNote struct {
 	startLine int
 	line      int
 	editingID string
+
+	// suggesting marks a suggestion, and suggestion is the code it started
+	// from, so saving it unchanged can be caught. warned is set once it was.
+	suggesting bool
+	suggestion string
+	warned     bool
 }
 
 func New(opts Options) Model {
@@ -287,6 +293,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tickSyncAge()
 	case yankedMsg:
 		return m.applyYanked(msg)
+	case headFileMsg:
+		return m.applyHeadFile(msg)
+	case launchedMsg:
+		return m.applyLaunched(msg)
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	case tea.MouseMsg:
@@ -410,12 +420,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.startReply(id)
 		}
 		return m.startComment()
+	case "C":
+		return m.startSuggestion()
 	case "v":
 		return m.toggleRangeAnchor()
 	case "y":
 		return m.yank(false)
 	case "Y":
 		return m.yank(true)
+	case "o":
+		return m.openInEditor()
+	case "O":
+		return m.openPullRequest()
 	case "e":
 		return m.editNoteUnderCursor()
 	case "d":
@@ -866,7 +882,7 @@ func (m Model) leave(key string) (tea.Model, tea.Cmd) {
 func ownMsg(msg tea.Msg) bool {
 	switch msg.(type) {
 	case backMsg, submitResultMsg, threadActionMsg, threadContextMsg,
-		syncResultMsg, syncTickMsg, yankedMsg:
+		syncResultMsg, syncTickMsg, yankedMsg, headFileMsg, launchedMsg:
 		return true
 	}
 	return false
