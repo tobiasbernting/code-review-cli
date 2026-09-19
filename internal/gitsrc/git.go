@@ -90,6 +90,35 @@ func (r *Repo) Range(spec string) ([]*diffparse.FileDiff, error) {
 	return files, nil
 }
 
+// RangeHead is the commit a revision range ends at, or "" when it ends at the
+// working tree, as a single revision does.
+func (r *Repo) RangeHead(spec string) (string, error) {
+	end := rangeEnd(spec)
+	if end == "" {
+		return "", nil
+	}
+	out, err := run(r.Root, "rev-parse", "--verify", end+"^{commit}")
+	return strings.TrimSpace(out), err
+}
+
+func rangeEnd(spec string) string {
+	for _, sep := range []string{"...", ".."} {
+		if _, end, ok := strings.Cut(spec, sep); ok {
+			if end == "" {
+				return "HEAD"
+			}
+			return end
+		}
+	}
+	return ""
+}
+
+// Show reads a file as it is at a commit.
+func (r *Repo) Show(sha, path string) ([]byte, error) {
+	out, err := run(r.Root, "show", sha+":"+path)
+	return []byte(out), err
+}
+
 const emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 func (r *Repo) diff(rev string) (string, error) {

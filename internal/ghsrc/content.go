@@ -3,6 +3,8 @@ package ghsrc
 import (
 	"bytes"
 	"fmt"
+	"net/url"
+	"strings"
 )
 
 // BlobText reads pinned file content for a thread whose lines no longer occur
@@ -22,4 +24,19 @@ func (c Client) BlobText(repo, sha string) (string, error) {
 		return "", fmt.Errorf("binary file; textual context is unavailable")
 	}
 	return string(data), nil
+}
+
+// FileAt reads a file as it is at a commit, for opening in an editor. Like
+// BlobText it only follows a pinned commit, never a branch name.
+func (c Client) FileAt(repo, sha, path string) ([]byte, error) {
+	if !revisionObjectID(sha) {
+		return nil, fmt.Errorf("missing or invalid file revision")
+	}
+	segs := strings.Split(path, "/")
+	for i, s := range segs {
+		segs[i] = url.PathEscape(s)
+	}
+	out, err := c.run("api", "-H", "Accept: application/vnd.github.raw",
+		fmt.Sprintf("repos/%s/contents/%s?ref=%s", repo, strings.Join(segs, "/"), sha))
+	return []byte(out), err
 }

@@ -112,6 +112,12 @@ func (m QueueModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case launchedMsg:
+		if msg.err != nil {
+			m.notice = "could not open the browser: " + msg.err.Error()
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	case tea.MouseMsg:
@@ -189,6 +195,10 @@ func (m QueueModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			sel = Selection{Repo: m.items[m.cursor].Repo, Number: m.items[m.cursor].Number}
 		}
 		return m, func() tea.Msg { return openMsg{sel: sel, preview: true} }
+	case "O":
+		if m.cursor < len(m.items) && m.items[m.cursor].URL != "" {
+			return m, browse(m.items[m.cursor].URL)
+		}
 	case "enter", " ":
 		if m.cursor < len(m.items) {
 			it := m.items[m.cursor]
@@ -275,7 +285,7 @@ func (m QueueModel) View() string {
 		}
 	}
 
-	hint := "enter open  t switch  r refresh  L loading  q quit"
+	hint := "enter open  O browser  t switch  r refresh  L loading  q quit"
 	if m.err != "" && len(m.items) > 0 {
 		hint = "r retry  " + hint
 	}

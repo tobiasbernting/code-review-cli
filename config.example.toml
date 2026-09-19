@@ -41,6 +41,17 @@
 # Unset, krv uses $VISUAL, then $EDITOR, then vi.
 # editor = "hx"
 
+# Editor o opens the file under the cursor in, at that line. Unset, krv uses
+# the editor above. Terminal editors (vi, vim, nvim, nano, hx, kak, micro,
+# emacs) take over the terminal until you quit them; VS Code (code), Cursor,
+# Windsurf, Zed and Sublime Text (subl) open beside krv.
+# open_editor = "code"
+
+# How to call an editor krv does not know, with {file} and {line}, and
+# whether krv waits for it to exit before carrying on.
+# open_editor_cmd = "myedit --line {line} {file}"
+# open_editor_wait = true
+
 # Include untracked files when reviewing uncommitted work with "krv .".
 # On, because new files are usually the substance of generated-code review.
 # untracked = true

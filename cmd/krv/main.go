@@ -458,10 +458,14 @@ func resolve(repo *gitsrc.Repo, cfg config.Config, target string) (tui.Source, [
 
 	if target == "" || target == "." {
 		files, err := repo.WorkingTree(cfg.Untracked)
-		return tui.Source{Kind: tui.SourceLocal, Title: "working tree"}, files, err
+		return tui.Source{Kind: tui.SourceLocal, Title: "working tree", Root: repo.Root}, files, err
 	}
 	files, err := repo.Range(target)
-	return tui.Source{Kind: tui.SourceLocal, Title: target}, files, err
+	if err != nil {
+		return tui.Source{}, nil, err
+	}
+	head, err := repo.RangeHead(target)
+	return tui.Source{Kind: tui.SourceLocal, Title: target, Root: repo.Root, Rev: head}, files, err
 }
 
 func resolvePR(repo *gitsrc.Repo, cfg config.Config, number int) (tui.Source, []*diffparse.FileDiff, error) {
@@ -491,7 +495,7 @@ func loadPR(client ghsrc.Client, name string, number int) (tui.Source, []*diffpa
 	src := tui.Source{
 		Kind:  tui.SourcePR,
 		Title: fmt.Sprintf("%s#%d %s", name, pr.Number, pr.Title),
-		Repo:  name, PRNumber: pr.Number, Client: client,
+		Repo:  name, PRNumber: pr.Number, URL: pr.URL, Client: client,
 		Author: pr.Author.Login, Viewer: session.Viewer,
 		HeadSHA: pr.HeadSHA, FollowUp: session,
 	}
@@ -523,6 +527,7 @@ func printConfig(cfg config.Config, repoRoot string) error {
 	fmt.Printf("density    %s\n", layout.Density)
 	fmt.Printf("layout     %s\n", layout.Mode)
 	fmt.Printf("editor     %s\n", cfg.EditorCommand())
+	fmt.Printf("open with  %s\n", orDefault(cfg.OpenEditorCmd, cfg.OpenEditorCommand()))
 	fmt.Printf("untracked  %t\n", cfg.Untracked)
 	fmt.Printf("color      %t\n", cfg.Color)
 	fmt.Printf("mouse      %t\n", cfg.Mouse)

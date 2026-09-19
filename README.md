@@ -43,7 +43,7 @@ including an enterprise one.
 
 A bare `krv` lists what is waiting on you, across every repository, with CI
 status, age, and how many unsent drafts you already have on each. `enter` (or
-a double click) opens one, `t` switches to your own pull requests, `r`
+a double click) opens one, `O` opens it in the browser, `t` switches to your own pull requests, `r`
 refreshes, and `L` shows the loading screen without loading anything.
 
 A pull request opened from the queue opens in the same window: `esc` cancels
@@ -94,6 +94,8 @@ Reviewing:
 | `S` | submit the review to GitHub |
 | `y` | copy the selection, or the line, hunk or path under the cursor, as code |
 | `Y` | copy a reference to it instead, as `path:L12-L18` |
+| `o` | open the file in your editor at this line — VS Code, vim, hx, …; see [Configuration](#configuration) |
+| `O` | open the pull request's Files tab at this line; in the queue, the pull request |
 
 Follow-up reviews add `t`, `a`, `D`, and `x` / `c` / `R` inside a thread — see
 [Follow-up reviews](#follow-up-reviews). `?` in krv lists every key for the
@@ -304,11 +306,30 @@ syntax = "catppuccin-mocha"   # any chroma style name
 density = "comfortable"       # comfortable or compact
 layout = "unified"            # unified or split; split needs 140 columns
 editor = "hx"
+open_editor = "code"          # what o opens files in; default: editor
 untracked = true
 color = true
 mouse = true                  # false leaves clicks and drags to the terminal
 width = 120
 ```
+
+`o` opens the file under the cursor in `open_editor` at that line, falling back
+to `editor`, `$VISUAL`, `$EDITOR` and `vi`. krv knows how to pass the line to
+VS Code (`code`, `code-insiders`), Cursor, Windsurf, Zed and Sublime Text, which
+open beside krv, and to terminal editors such as vim, nvim, hx and nano, which
+krv steps aside for until you quit them. Anything else gets `+N file` and is
+waited for, unless you say otherwise:
+
+```toml
+open_editor = "code"                            # VS Code, beside krv
+open_editor_cmd = "myedit --line {line} {file}" # an editor krv does not know
+open_editor_wait = false                        # it opens its own window
+```
+
+In `krv .` that is the file in your checkout. A pull request or a range such as
+`main..feature` opens a read-only copy of the head version instead, under
+`$TMPDIR/krv/<owner>/<repo>/<sha>/`, so your checkout never stands in for code
+you are reviewing.
 
 `host` is empty by default on purpose: gh already knows whether you are on
 github.com or an enterprise host, and a repository-local file is a better place

@@ -61,6 +61,10 @@ var helpContent = []helpSection{
 		{keys: "y", desc: "copy the selection, line, hunk or path as code"},
 		{keys: "Y", desc: "copy a reference: src/api.go:L12-L18"},
 	}},
+	{title: "Open", entries: []helpEntry{
+		{keys: "o", desc: "open in your editor at this line (VS Code, vim, hx, …; set open_editor)"},
+		{keys: "O", desc: "open the pull request on GitHub at this line"},
+	}},
 	{title: "Follow-up", only: inFollowUp, entries: []helpEntry{
 		{keys: "t", desc: "your threads"},
 		{keys: "a", desc: "changes since your latest review"},

@@ -293,6 +293,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tickSyncAge()
 	case yankedMsg:
 		return m.applyYanked(msg)
+	case headFileMsg:
+		return m.applyHeadFile(msg)
+	case launchedMsg:
+		return m.applyLaunched(msg)
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	case tea.MouseMsg:
@@ -424,6 +428,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.yank(false)
 	case "Y":
 		return m.yank(true)
+	case "o":
+		return m.openInEditor()
+	case "O":
+		return m.openPullRequest()
 	case "e":
 		return m.editNoteUnderCursor()
 	case "d":
@@ -874,7 +882,7 @@ func (m Model) leave(key string) (tea.Model, tea.Cmd) {
 func ownMsg(msg tea.Msg) bool {
 	switch msg.(type) {
 	case backMsg, submitResultMsg, threadActionMsg, threadContextMsg,
-		syncResultMsg, syncTickMsg, yankedMsg:
+		syncResultMsg, syncTickMsg, yankedMsg, headFileMsg, launchedMsg:
 		return true
 	}
 	return false
