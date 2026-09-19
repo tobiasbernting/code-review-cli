@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.0](https://github.com/tobiasbernting/krv/compare/v2.2.0...v2.3.0) (2026-09-19)
+
+
+### Features
+
+* full-screen loading scenes and a linux boot ([#35](https://github.com/tobiasbernting/krv/issues/35)) ([34a9814](https://github.com/tobiasbernting/krv/commit/34a98149085ed5c58ae8d7995e1361677e7b0925))
+* reply to threads from the diff view ([#34](https://github.com/tobiasbernting/krv/issues/34)) ([d735e08](https://github.com/tobiasbernting/krv/commit/d735e08345e2bb3943f55904e377ba361721a7f4))
+
 ## [2.2.0](https://github.com/tobiasbernting/krv/compare/v2.1.0...v2.2.0) (2026-09-19)
 
 
