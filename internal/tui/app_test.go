@@ -417,6 +417,60 @@ func TestAppDoubleClickInTheQueueOpensThePullRequest(t *testing.T) {
 	}
 }
 
+// followupApp is a queue of pull requests in every review state, each of
+// which opens as one you reviewed before its latest commits.
+func followupApp(t *testing.T) App {
+	t.Helper()
+	open := func(sel Selection) (Options, error) {
+		opts, err := openerFor(t, nil)(sel)
+		opts.Files = diffparse.Parse(noteDiff)
+		opts.Source.FollowUp = followupSession()
+		return opts, err
+	}
+	a := newApp(t, open)
+	a.queue.items = reviewStateItems()
+	return a
+}
+
+func TestAppOpensNewCommitsOnChangesSinceReview(t *testing.T) {
+	a, _ := pressA(t, followupApp(t), "enter")
+	if a.screen != screenReview {
+		t.Fatalf("screen = %v, want the review", a.screen)
+	}
+	if !a.review.changesView || a.review.mode != modeDiff {
+		t.Fatalf("opened on mode %v, changes %v; want the changes since your review", a.review.mode, a.review.changesView)
+	}
+	if !strings.Contains(a.View(), "since review") {
+		t.Errorf("the view does not say it shows changes since your review:\n%s", a.View())
+	}
+	a, _ = pressA(t, a, "D")
+	if a.review.changesView {
+		t.Error("D did not reach the full diff")
+	}
+}
+
+func TestAppOpensAnUnmarkedPullRequestAsBefore(t *testing.T) {
+	a, _ := pressA(t, followupApp(t), "j", "enter")
+	if a.screen != screenReview {
+		t.Fatalf("screen = %v, want the review", a.screen)
+	}
+	if a.review.changesView || a.review.mode != modeThreads {
+		t.Errorf("opened on mode %v, changes %v; want your threads as before", a.review.mode, a.review.changesView)
+	}
+}
+
+func TestAppDoubleClickOnNewCommitsOpensChangesSinceReview(t *testing.T) {
+	a := followupApp(t)
+	a.queue.now = ticking(100 * time.Millisecond)
+	for range 2 {
+		next, cmd := a.Update(click(1))
+		a, _ = settle(t, next.(App), cmd)
+	}
+	if a.screen != screenReview || !a.review.changesView {
+		t.Errorf("double click on a marked row: screen %v, changes %v", a.screen, a.review.changesView)
+	}
+}
+
 func TestAppDropsAYankResultFromALeftReview(t *testing.T) {
 	clip := &fakeClipboard{err: errors.New("from the old review")}
 	open := func(sel Selection) (Options, error) {
