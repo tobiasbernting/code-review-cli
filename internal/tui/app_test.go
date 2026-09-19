@@ -92,6 +92,10 @@ func pressA(t *testing.T, a App, keys ...string) (App, bool) {
 			msg = tea.KeyMsg{Type: tea.KeyEsc}
 		case "ctrl+c":
 			msg = tea.KeyMsg{Type: tea.KeyCtrlC}
+		case "tab":
+			msg = tea.KeyMsg{Type: tea.KeyTab}
+		case "shift+tab":
+			msg = tea.KeyMsg{Type: tea.KeyShiftTab}
 		}
 		next, cmd := a.Update(msg)
 		var q bool
@@ -226,20 +230,50 @@ func loadingApp(t *testing.T, width, height int) App {
 
 func TestAppLoadingPageNamesThePullRequest(t *testing.T) {
 	a := loadingApp(t, 100, 30)
-	view := stripANSI(a.View())
+	for i, sc := range scenes {
+		a.loading.scene = i
+		// Through a whole loop of each animation, not just its first frame.
+		for f := 0; f < 400; f += 7 {
+			a.loading.frame = f
+			view := stripANSI(a.View())
+			for _, want := range []string{"acme/x#8", "feat: notes", "ann", "esc cancel", "tab next"} {
+				if !strings.Contains(view, want) {
+					t.Fatalf("%s, frame %d: loading page lacks %q:\n%s", sc.name, f, want, view)
+				}
+			}
+			if lines := strings.Count(view, "\n") + 1; lines != 30 {
+				t.Fatalf("%s, frame %d: loading page is %d lines, want the full 30", sc.name, f, lines)
+			}
+			for n, line := range strings.Split(view, "\n") {
+				if w := lipgloss.Width(line); w != 100 {
+					t.Fatalf("%s, frame %d: line %d is %d wide on a 100-column terminal", sc.name, f, n, w)
+				}
+			}
+		}
+	}
+}
 
-	for _, want := range []string{"acme/x#8", "feat: notes", "ann", "esc"} {
-		if !strings.Contains(view, want) {
-			t.Errorf("loading page lacks %q:\n%s", want, view)
-		}
+func TestAppLoadingPageTabCyclesScenes(t *testing.T) {
+	a := loadingApp(t, 100, 30)
+	a.loading.scene = 0
+	a.loading.frame = 12
+	seen := map[string]bool{}
+	for range scenes {
+		seen[a.View()] = true
+		a, _ = pressA(t, a, "tab")
 	}
-	if lines := strings.Count(view, "\n") + 1; lines != 30 {
-		t.Errorf("loading page is %d lines, want the full 30", lines)
+	if len(seen) != len(scenes) {
+		t.Errorf("tab showed %d different scenes, want all %d", len(seen), len(scenes))
 	}
-	for i, line := range strings.Split(view, "\n") {
-		if w := lipgloss.Width(line); w > 100 {
-			t.Errorf("line %d is %d wide on a 100-column terminal", i, w)
-		}
+	if a.loading.scene != 0 {
+		t.Errorf("tab round the scenes ended on %d, want back at 0", a.loading.scene)
+	}
+	if a.loading.frame != 0 {
+		t.Error("a new scene did not start from its beginning")
+	}
+	a, _ = pressA(t, a, "shift+tab")
+	if a.loading.scene != len(scenes)-1 {
+		t.Errorf("shift+tab from the first scene went to %d, want the last", a.loading.scene)
 	}
 }
 
@@ -263,13 +297,16 @@ func TestAppLoadingPageAnimates(t *testing.T) {
 
 func TestAppLoadingPageFallsBackOnSmallTerminals(t *testing.T) {
 	a := loadingApp(t, 40, 6)
-	view := stripANSI(a.View())
-	if !strings.Contains(view, "acme/x#8") {
-		t.Errorf("small loading page lacks the pull request:\n%s", view)
-	}
-	for i, line := range strings.Split(view, "\n") {
-		if w := lipgloss.Width(line); w > 40 {
-			t.Errorf("line %d is %d wide on a 40-column terminal", i, w)
+	for i, sc := range scenes {
+		a.loading.scene = i
+		view := stripANSI(a.View())
+		if !strings.Contains(view, "acme/x#8") {
+			t.Errorf("%s: small loading page lacks the pull request:\n%s", sc.name, view)
+		}
+		for n, line := range strings.Split(view, "\n") {
+			if w := lipgloss.Width(line); w > 40 {
+				t.Errorf("%s: line %d is %d wide on a 40-column terminal", sc.name, n, w)
+			}
 		}
 	}
 }
@@ -399,5 +436,41 @@ func TestAppDropsAYankResultFromALeftReview(t *testing.T) {
 	next, _ = a.Update(yank())
 	if a = next.(App); a.review.err != "" {
 		t.Errorf("the new review reported the old one's copy: %q", a.review.err)
+	}
+}
+
+func TestRoman(t *testing.T) {
+	for n, want := range map[int]string{1: "I", 4: "IV", 8: "VIII", 31: "XXXI", 1994: "MCMXCIV", 4000: "4000"} {
+		if got := roman(n); got != want {
+			t.Errorf("roman(%d) = %q, want %q", n, got, want)
+		}
+	}
+}
+
+func TestAppPreviewShowsLoadingPageWithoutLoading(t *testing.T) {
+	loads := 0
+	a := newApp(t, func(Selection) (Options, error) {
+		loads++
+		return Options{}, nil
+	})
+	next, _ := a.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	a, _ = pressA(t, next.(App), "L")
+	if a.screen != screenLoading {
+		t.Fatalf("screen = %v, want the loading page", a.screen)
+	}
+	if view := stripANSI(a.View()); !strings.Contains(view, "acme/x#8") {
+		t.Errorf("preview does not name the highlighted pull request:\n%s", view)
+	}
+	next, cmd := a.Update(frameMsg{gen: a.gen})
+	a = next.(App)
+	if cmd == nil {
+		t.Error("the preview does not animate")
+	}
+	a, _ = pressA(t, a, "esc")
+	if a.screen != screenQueue {
+		t.Errorf("esc left the preview on %v, want the queue", a.screen)
+	}
+	if loads != 0 {
+		t.Errorf("the preview loaded %d pull requests, want none", loads)
 	}
 }

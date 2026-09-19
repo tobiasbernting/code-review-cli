@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"math/rand/v2"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -41,7 +42,12 @@ func NewApp(queue QueueModel, open func(Selection) (Options, error)) App {
 }
 
 // openMsg is the queue asking for a pull request.
-type openMsg struct{ sel Selection }
+// A preview shows the loading page without loading anything; it stays until
+// esc.
+type openMsg struct {
+	sel     Selection
+	preview bool
+}
 
 // openedMsg is a finished load.
 type openedMsg struct {
@@ -80,8 +86,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.screen = screenLoading
 		a.loading = loadingPage{
 			item:  a.queue.item(msg.sel),
+			scene: rand.IntN(len(scenes)),
 			theme: a.queue.theme,
 			width: a.width, height: a.height,
+		}
+		if msg.preview {
+			return a, nextFrame(a.gen)
 		}
 		gen, open, sel := a.gen, a.open, msg.sel
 		load := func() tea.Msg {
@@ -125,6 +135,13 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// The load keeps running; its reply is dropped by gen.
 				a.gen++
 				a.screen = screenQueue
+			case "tab", "shift+tab":
+				step := 1
+				if k.String() == "shift+tab" {
+					step = len(scenes) - 1
+				}
+				a.loading.scene = (a.loading.scene + step) % len(scenes)
+				a.loading.frame = 0 // each scene from its start
 			}
 		}
 		return a, nil
