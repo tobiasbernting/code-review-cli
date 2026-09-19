@@ -42,8 +42,9 @@ including an enterprise one.
 ### The queue
 
 A bare `krv` lists what is waiting on you, across every repository, with CI
-status, age, and how many unsent drafts you already have on each. `enter` (or a double
-click) opens one, `t` switches to your own pull requests, `r` refreshes.
+status, age, and how many unsent drafts you already have on each. `enter` (or
+a double click) opens one, `t` switches to your own pull requests, `r`
+refreshes.
 
 A pull request opened from the queue opens in the same window: `esc` cancels
 while it loads, `q` in the review goes back to the list (refreshed, cursor
@@ -92,13 +93,19 @@ Reviewing:
 | `y` | copy the selection, or the line, hunk or path under the cursor, as code |
 | `Y` | copy a reference to it instead, as `path:L12-L18` |
 
+Follow-up reviews add `t`, `a`, `D`, and `x` / `c` / `R` inside a thread — see
+[Follow-up reviews](#follow-up-reviews). `?` in krv lists every key for the
+review in front of you, grouped, with a few recipes; it scrolls, and on a wide
+terminal sets its sections side by side.
+
 ### Mouse and clipboard
 
 The wheel scrolls; the cursor stays put unless it would leave the screen.
 `shift`+wheel scrolls sideways. A click moves the cursor, a double click does
 what `enter` does, and a drag selects lines for a comment or a copy — within
 one hunk, scrolling when it reaches the edge. The file list, the thread list
-and the queue select on click and open on double click.
+and the queue select on click and open on double click; in a thread, a comment
+or help, the wheel scrolls what you are reading.
 
 While krv has the mouse, the terminal's own text selection needs a modifier:
 hold `shift` in most terminals, `option` in iTerm2, `fn` in Terminal.app. That
@@ -147,9 +154,9 @@ Add and delete are stated three times over — edge marker, sign, row tint — s
 the diff still reads with colour disabled or unperceived, and so that focusing
 a row can lift its tone without erasing what kind of line it is. A `›` at the
 right edge means the line continues past it; `h` and `l` (or `shift`+wheel)
-scroll to see it. Drafts and review comments wrap to the terminal instead, hanging under their
-author's name: one line where they sit, expanded while the cursor is on them,
-so a conversation never buries the code it is about.
+scroll to see it. Drafts and review comments wrap to the terminal instead,
+hanging under their author's name: one line where they sit, expanded while the
+cursor is on them, so a conversation never buries the code it is about.
 
 Themes are chosen, not detected: `dark`, `light` and `high-contrast` each set a
 background, so krv never has to guess what your terminal is and never guesses
@@ -208,17 +215,16 @@ this looks.
 
 Drafts are stored outside the repository — under `~/.config/krv`, or
 `$XDG_CONFIG_HOME/krv` if that is set — so they never pollute a worktree that
-is shared or reset. They are keyed by pull
-request number, or by branch for local work, so an agent rewriting files
-underneath you does not orphan them.
+is shared or reset. They are keyed by pull request number, or by branch for
+local work, so an agent rewriting files underneath you does not orphan them.
 
 Each draft records the blob hash of the file it was written against. When the
 file changes, the draft is shown as **needs re-anchor** and detached from its
 line rather than pointing at a line that has since moved. Press `m`, navigate
-to its new line, and press `enter`; press `v` first to make a selection. A draft
-that needs re-anchoring cannot be submitted. The same change detection applies
-to a file marked reviewed: it keeps its tick and gains a `~`, because silently
-unticking would hide that you had already read it.
+to its new line, and press `enter`; press `v` first to make a selection. A
+draft that needs re-anchoring cannot be submitted. The same change detection
+applies to a file marked reviewed: it keeps its tick and gains a `~`, because
+silently unticking would hide that you had already read it.
 
 Nothing is sent anywhere until you press `S`. GitHub reviews are atomic, so
 every draft is posted as a single review with one event — comment, approve, or
@@ -234,14 +240,27 @@ prints the drafts for pasting wherever they need to go.
 GitHub review discussions are shown as threads. `outdated` means GitHub can no
 longer anchor a thread to the current diff; `resolved` means the discussion was
 closed. These states are independent, and neither blocks your review. Long
-comments expand to eight lines under the cursor; `enter` opens the complete
-scrollable body.
+comments expand to eight lines under the cursor; `enter` or a double click
+opens the complete scrollable body.
 
 Press `r` to fetch the latest diff and review threads as one update. Local
 drafts are preserved, the cursor stays near the same file and line, and new or
 edited comments are marked until visited. A failed sync leaves the existing
 view intact. See [Comments and sync](docs/comments-and-sync.md) for the complete
 state and failure model.
+
+### Follow-up reviews
+
+Reopening a teammate's PR starts from your own threads when you have a submitted
+review, including one made in GitHub's browser UI. Resolved threads stay visible.
+Use `enter` for original context, related changes, replies, and current context;
+`x` verifies locally, `c` replies, and `R` resolves or reopens on GitHub.
+
+Use `a` for all changes since your latest review and `D` for the current PR diff
+and draft re-anchoring. `S` supports clean approvals and pins submission to the
+reviewed commit. `r` refreshes the snapshot and review baseline together.
+See [comments and sync](docs/comments-and-sync.md) for verification and failure
+semantics. Copilot highlighting and automated fix analysis remain TODOs.
 
 ## Configuration
 
@@ -293,8 +312,9 @@ the code being reviewed.
 | `internal/diffparse` | unified diff → structs; hunk bodies parsed lazily |
 | `internal/gitsrc` | shells out to `git` for diffs and stats |
 | `internal/render` | diffs → styled rows; syntax and word-level highlighting |
-| `internal/tui` | bubbletea viewport over those rows |
-| `internal/notes` | review notes and per-file marks on disk |
+| `internal/tui` | the queue, the review viewport over those rows, help, mouse and yank |
+| `internal/notes` | drafts and per-file review marks on disk |
+| `internal/followup` | follow-up reviews: your threads, what changed since, what you verified |
 | `internal/clipboard` | OSC 52 and the platform copy command |
 | `internal/ghsrc` | pull requests, comments and review submission, via `gh` |
 | `internal/config` | settings resolution |
@@ -353,16 +373,3 @@ goreleaser build --snapshot --clean
 
 - Replying to a teammate's comment thread
 - `LEFT`-side comments on deleted lines
-
-### Follow-up reviews
-
-Reopening a teammate's PR starts from your own threads when you have a submitted
-review, including one made in GitHub's browser UI. Resolved threads stay visible.
-Use `enter` for original context, related changes, replies, and current context;
-`x` verifies locally, `c` replies, and `R` resolves or reopens on GitHub.
-
-Use `a` for all changes since your latest review and `D` for the current PR diff
-and draft re-anchoring. `S` supports clean approvals and pins submission to the
-reviewed commit. `r` refreshes the snapshot and review baseline together.
-See [comments and sync](docs/comments-and-sync.md) for verification and failure
-semantics. Copilot highlighting and automated fix analysis remain TODOs.
